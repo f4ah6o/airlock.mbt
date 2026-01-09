@@ -1,0 +1,9 @@
+{
+  "is-main": true,
+  "import": [
+    {
+      "path": "airlock/airlock",
+      "alias": "lib"
+    }
+  ]
+}
