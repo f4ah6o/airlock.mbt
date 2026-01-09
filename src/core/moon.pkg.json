@@ -1,0 +1,5 @@
+{
+  "import": [
+    "airlock/airlock/src/shared"
+  ]
+}
