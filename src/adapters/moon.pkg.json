@@ -1,5 +1,25 @@
 {
   "import": [
-    "airlock/airlock/src/shared"
+    "airlock/airlock/src/shared",
+    {
+      "path": "f4ah6o/direct_sdk/config",
+      "alias": "direct_config"
+    },
+    {
+      "path": "f4ah6o/direct_sdk/errors",
+      "alias": "direct_errors"
+    },
+    {
+      "path": "f4ah6o/direct_sdk/rpc/client",
+      "alias": "rpc_client"
+    },
+    {
+      "path": "f4ah6o/direct_sdk/types",
+      "alias": "direct_types"
+    },
+    {
+      "path": "moonbitlang/async",
+      "alias": "async"
+    }
   ]
 }
