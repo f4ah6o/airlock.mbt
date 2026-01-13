@@ -38,11 +38,9 @@ test "WebSocketManager new" {
 test "WebSocketManager set_state" {
   let config = WebSocketConfig::default("ws://test")
   let manager = WebSocketManager::new(config)
-
   let connected = manager.set_state(ConnectionState::Connected)
   assert_eq(connected.state, ConnectionState::Connected)
   assert_eq(connected.reconnect_count, 0)
-
   let reconnecting = manager.set_state(ConnectionState::Reconnecting(3))
   assert_eq(reconnecting.reconnect_count, 3)
 }
@@ -51,7 +49,6 @@ test "WebSocketManager set_state" {
 test "WebSocketManager subscribe" {
   let config = WebSocketConfig::default("ws://test")
   let manager = WebSocketManager::new(config)
-
   let subscribed = manager.subscribe("tkt_001")
   assert_eq(subscribed.subscribed_tickets.length(), 1)
   assert_eq(subscribed.pending_events.length(), 1)
@@ -65,7 +62,6 @@ test "WebSocketManager subscribe" {
 test "WebSocketManager unsubscribe" {
   let config = WebSocketConfig::default("ws://test")
   let manager = WebSocketManager::new(config).subscribe("tkt_001")
-
   let unsubscribed = manager.unsubscribe("tkt_001")
   assert_eq(unsubscribed.subscribed_tickets.length(), 0)
 }
@@ -74,17 +70,12 @@ test "WebSocketManager unsubscribe" {
 test "WebSocketManager should_reconnect" {
   let config = WebSocketConfig::default("ws://test")
   let manager = WebSocketManager::new(config)
-
   assert_true(manager.should_reconnect())
-
   let connected = manager.set_state(ConnectionState::Connected)
   assert_false(connected.should_reconnect())
 
   // After max attempts
-  let max_attempts : WebSocketManager = {
-    ..manager,
-    reconnect_count: 10,
-  }
+  let max_attempts : WebSocketManager = { ..manager, reconnect_count: 10 }
   assert_false(max_attempts.should_reconnect())
 }
 
@@ -127,13 +118,10 @@ test "ClientEvent to_json" {
 test "parse_server_event" {
   let ping = parse_server_event("{\"type\":\"ping\"}")
   assert_true(ping is Some(ServerEvent::Ping))
-
   let pong = parse_server_event("{\"type\":\"pong\"}")
   assert_true(pong is Some(ServerEvent::Pong))
-
   let error = parse_server_event("{\"type\":\"error\",\"message\":\"test\"}")
   assert_true(error is Some(_))
-
   let unknown = parse_server_event("{\"type\":\"unknown\"}")
   assert_true(unknown is None)
 }

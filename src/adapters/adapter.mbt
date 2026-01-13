@@ -1,17 +1,17 @@
 ///|
 /// Normalized message format for cross-platform compatibility
 pub(all) struct NormalizedMessage {
-  external_id : String       // Platform-specific message ID
-  platform : String          // "direct", "slack", "discord", etc.
-  channel_id : String        // DM/Channel ID
-  sender_id : String         // Platform user ID
-  sender_name : String       // Display name
-  text : String              // Message content
+  external_id : String // Platform-specific message ID
+  platform : String // "direct", "slack", "discord", etc.
+  channel_id : String // DM/Channel ID
+  sender_id : String // Platform user ID
+  sender_name : String // Display name
+  text : String // Message content
   attachments : Array[@shared.Attachment]
-  timestamp : String         // ISO timestamp
-  is_bot : Bool              // Whether sender is a bot
-  reply_to_id : String       // For threading (empty if not reply)
-  raw_data : String          // Original JSON for debugging
+  timestamp : String // ISO timestamp
+  is_bot : Bool // Whether sender is a bot
+  reply_to_id : String // For threading (empty if not reply)
+  raw_data : String // Original JSON for debugging
 } derive(Show, Eq)
 
 ///|
@@ -23,7 +23,7 @@ pub fn NormalizedMessage::new(
   sender_id : String,
   sender_name : String,
   text : String,
-  timestamp : String
+  timestamp : String,
 ) -> NormalizedMessage {
   {
     external_id,
@@ -43,11 +43,11 @@ pub fn NormalizedMessage::new(
 ///|
 /// Outbound message to send via adapter
 pub(all) struct OutboundMessage {
-  channel_id : String                   // Target DM/Channel ID
-  text : String                         // Message content
+  channel_id : String // Target DM/Channel ID
+  text : String // Message content
   attachments : Array[@shared.Attachment]
-  reply_to_id : String                  // For threading (empty if not reply)
-  idempotency_key : String              // For deduplication
+  reply_to_id : String // For threading (empty if not reply)
+  idempotency_key : String // For deduplication
 } derive(Show, Eq)
 
 ///|
@@ -55,7 +55,7 @@ pub(all) struct OutboundMessage {
 pub fn OutboundMessage::new(
   channel_id : String,
   text : String,
-  idempotency_key : String
+  idempotency_key : String,
 ) -> OutboundMessage {
   { channel_id, text, attachments: [], reply_to_id: "", idempotency_key }
 }
@@ -64,14 +64,17 @@ pub fn OutboundMessage::new(
 /// Result of sending a message
 pub(all) struct SendResult {
   success : Bool
-  external_id : String   // Platform message ID if successful
+  external_id : String // Platform message ID if successful
   error_message : String // Error description if failed
-  timestamp : String     // Send timestamp
+  timestamp : String // Send timestamp
 } derive(Show, Eq)
 
 ///|
 /// Create a successful SendResult
-pub fn SendResult::success(external_id : String, timestamp : String) -> SendResult {
+pub fn SendResult::success(
+  external_id : String,
+  timestamp : String,
+) -> SendResult {
   { success: true, external_id, error_message: "", timestamp }
 }
 
@@ -106,11 +109,11 @@ pub(all) enum AdapterState {
 /// Base adapter configuration
 pub(all) struct AdapterConfig {
   platform_name : String
-  bot_user_id : String      // For loop prevention
-  api_token : String        // Authentication token
-  webhook_secret : String   // For webhook validation
-  retry_count : Int         // Number of retries on failure
-  retry_delay_ms : Int      // Base delay between retries
+  bot_user_id : String // For loop prevention
+  api_token : String // Authentication token
+  webhook_secret : String // For webhook validation
+  retry_count : Int // Number of retries on failure
+  retry_delay_ms : Int // Base delay between retries
 } derive(Show, Eq)
 
 ///|
@@ -118,7 +121,7 @@ pub(all) struct AdapterConfig {
 pub fn AdapterConfig::new(
   platform_name : String,
   bot_user_id : String,
-  api_token : String
+  api_token : String,
 ) -> AdapterConfig {
   {
     platform_name,
@@ -140,7 +143,7 @@ pub fn is_self_message(config : AdapterConfig, sender_id : String) -> Bool {
 /// Check if message should be ignored
 pub fn should_ignore_message(
   config : AdapterConfig,
-  message : NormalizedMessage
+  message : NormalizedMessage,
 ) -> Bool {
   // Ignore messages from our bot
   if is_self_message(config, message.sender_id) {

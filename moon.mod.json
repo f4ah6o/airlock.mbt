@@ -1,6 +1,12 @@
 {
   "name": "airlock/airlock",
   "version": "0.1.0",
+  "deps": {
+    "f4ah6o/direct_sdk": "0.7.0",
+    "f4ah6o/moonchat": "0.1.0",
+    "mizchi/luna": "0.4.1",
+    "moonbitlang/async": "0.15.0"
+  },
   "readme": "README.mbt.md",
   "repository": "",
   "license": "Apache-2.0",

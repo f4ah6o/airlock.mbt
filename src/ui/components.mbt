@@ -12,10 +12,10 @@ pub(all) struct TicketListItem {
   ticket_id : String
   subject : String
   user_name : String
-  elapsed_time : String         // e.g., "5m", "2h", "1d"
+  elapsed_time : String // e.g., "5m", "2h", "1d"
   assignee_names : Array[String]
-  has_draft : Bool              // Show draft badge
-  draft_status : String         // "pending", "checking", "checked", "rejected"
+  has_draft : Bool // Show draft badge
+  draft_status : String // "pending", "checking", "checked", "rejected"
   is_selected : Bool
 } derive(Show, Eq)
 
@@ -27,7 +27,7 @@ pub fn TicketListItem::from_ticket(
   has_draft : Bool,
   is_selected : Bool,
   user_name : String,
-  elapsed_time : String
+  elapsed_time : String,
 ) -> TicketListItem {
   {
     ticket_id: ticket.ticket_id,
@@ -66,9 +66,9 @@ pub(all) struct TimelineMessage {
   text : String
   sender_name : String
   timestamp : String
-  is_from_user : Bool           // true = user message, false = support reply
+  is_from_user : Bool // true = user message, false = support reply
   attachments : Array[AttachmentView]
-  reply_thread_id : String      // For threading visualization
+  reply_thread_id : String // For threading visualization
 } derive(Show, Eq)
 
 ///|
@@ -76,13 +76,15 @@ pub(all) struct TimelineMessage {
 pub(all) struct AttachmentView {
   name : String
   url : String
-  attachment_type : String      // "image", "file", "video", "audio"
-  thumbnail_url : String        // For image preview (empty if N/A)
+  attachment_type : String // "image", "file", "video", "audio"
+  thumbnail_url : String // For image preview (empty if N/A)
 } derive(Show, Eq)
 
 ///|
 /// Create AttachmentView from Attachment
-pub fn AttachmentView::from_attachment(att : @shared.Attachment) -> AttachmentView {
+pub fn AttachmentView::from_attachment(
+  att : @shared.Attachment,
+) -> AttachmentView {
   {
     name: att.name,
     url: att.url,
@@ -113,7 +115,7 @@ pub fn TimelinePaneState::initial() -> TimelinePaneState {
 /// Create TimelineMessage from Message
 pub fn TimelineMessage::from_message(
   msg : @shared.Message,
-  sender_name : String
+  sender_name : String,
 ) -> TimelineMessage {
   {
     message_id: msg.message_id,
@@ -138,7 +140,7 @@ pub(all) struct WorkspaceItem {
   sender_name : String
   timestamp : String
   is_draft : Bool
-  draft_status : String         // "pending", "checking", "checked", "rejected", "published"
+  draft_status : String // "pending", "checking", "checked", "rejected", "published"
   ai_warnings : Array[String]
   ai_suggestions : Array[String]
   can_publish : Bool
@@ -149,7 +151,7 @@ pub(all) struct WorkspaceItem {
 /// Create WorkspaceItem from Message
 pub fn WorkspaceItem::from_message(
   msg : @shared.Message,
-  sender_name : String
+  sender_name : String,
 ) -> WorkspaceItem {
   let (warnings, suggestions) = match msg.ai_check_result {
     Some(result) => (result.warnings, result.suggestions)
@@ -174,7 +176,7 @@ pub fn WorkspaceItem::from_message(
 pub(all) struct ReviewPanelState {
   is_visible : Bool
   draft_id : String
-  status : String               // "pending", "checking", "checked", "rejected"
+  status : String // "pending", "checking", "checked", "rejected"
   warnings : Array[String]
   suggestions : Array[String]
   check_passed : Bool
@@ -197,22 +199,25 @@ pub fn ReviewPanelState::empty() -> ReviewPanelState {
 /// Create review panel state from Message
 pub fn ReviewPanelState::from_draft(msg : @shared.Message) -> ReviewPanelState {
   match msg.ai_check_result {
-    Some(result) => {
-      is_visible: true,
-      draft_id: msg.message_id,
-      status: msg.draft_status.to_string(),
-      warnings: result.warnings,
-      suggestions: result.suggestions,
-      check_passed: result.passed,
-    }
-    None => {
-      is_visible: msg.is_draft && msg.draft_status != @shared.DraftStatus::Pending,
-      draft_id: msg.message_id,
-      status: msg.draft_status.to_string(),
-      warnings: [],
-      suggestions: [],
-      check_passed: false,
-    }
+    Some(result) =>
+      {
+        is_visible: true,
+        draft_id: msg.message_id,
+        status: msg.draft_status.to_string(),
+        warnings: result.warnings,
+        suggestions: result.suggestions,
+        check_passed: result.passed,
+      }
+    None =>
+      {
+        is_visible: msg.is_draft &&
+        msg.draft_status != @shared.DraftStatus::Pending,
+        draft_id: msg.message_id,
+        status: msg.draft_status.to_string(),
+        warnings: [],
+        suggestions: [],
+        check_passed: false,
+      }
   }
 }
 
@@ -249,8 +254,8 @@ pub fn WorkspacePaneState::initial() -> WorkspacePaneState {
 pub(all) struct PublishModalState {
   is_visible : Bool
   draft_id : String
-  draft_preview : String        // First 100 chars of draft
-  target_channel : String       // e.g., "Slack DM to @user123"
+  draft_preview : String // First 100 chars of draft
+  target_channel : String // e.g., "Slack DM to @user123"
   idempotency_key : String
 } derive(Show, Eq)
 
@@ -271,7 +276,7 @@ pub fn PublishModalState::hidden() -> PublishModalState {
 pub fn PublishModalState::show(
   draft : @shared.Message,
   target_channel : String,
-  idempotency_key : String
+  idempotency_key : String,
 ) -> PublishModalState {
   let preview = if draft.text.length() > 100 {
     let mut result = ""
@@ -305,7 +310,7 @@ pub(all) struct AppViewState {
   publish_modal : PublishModalState
   selected_ticket_id : String
   error_message : String
-  is_connected : Bool           // WebSocket connection status
+  is_connected : Bool // WebSocket connection status
 } derive(Show, Eq)
 
 ///|

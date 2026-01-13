@@ -10,9 +10,9 @@
 /// Real-time synchronization state
 pub(all) struct RealtimeState {
   ws_manager : WebSocketManager
-  last_event_id : String           // For event ordering
-  pending_syncs : Array[String]    // Ticket IDs needing sync
-  typing_users : Map[String, Array[String]]  // ticket_id -> user_ids
+  last_event_id : String // For event ordering
+  pending_syncs : Array[String] // Ticket IDs needing sync
+  typing_users : Map[String, Array[String]] // ticket_id -> user_ids
 } derive(Show, Eq)
 
 ///|
@@ -30,7 +30,7 @@ pub fn RealtimeState::new(ws_url : String) -> RealtimeState {
 /// Update WebSocket manager
 pub fn RealtimeState::update_ws(
   self : RealtimeState,
-  manager : WebSocketManager
+  manager : WebSocketManager,
 ) -> RealtimeState {
   { ..self, ws_manager: manager }
 }
@@ -39,7 +39,7 @@ pub fn RealtimeState::update_ws(
 /// Add ticket to pending syncs
 pub fn RealtimeState::mark_needs_sync(
   self : RealtimeState,
-  ticket_id : String
+  ticket_id : String,
 ) -> RealtimeState {
   if self.pending_syncs.contains(ticket_id) {
     return self
@@ -53,7 +53,7 @@ pub fn RealtimeState::mark_needs_sync(
 /// Remove ticket from pending syncs
 pub fn RealtimeState::mark_synced(
   self : RealtimeState,
-  ticket_id : String
+  ticket_id : String,
 ) -> RealtimeState {
   let syncs = self.pending_syncs.filter(fn(id) { id != ticket_id })
   { ..self, pending_syncs: syncs }
@@ -64,7 +64,7 @@ pub fn RealtimeState::mark_synced(
 pub fn RealtimeState::set_typing(
   self : RealtimeState,
   ticket_id : String,
-  user_ids : Array[String]
+  user_ids : Array[String],
 ) -> RealtimeState {
   let typing = self.typing_users
   typing.set(ticket_id, user_ids)
@@ -76,12 +76,14 @@ pub fn RealtimeState::set_typing(
 pub fn RealtimeState::add_typing_user(
   self : RealtimeState,
   ticket_id : String,
-  user_id : String
+  user_id : String,
 ) -> RealtimeState {
   let typing = self.typing_users
   let users = match typing.get(ticket_id) {
     Some(arr) =>
-      if arr.contains(user_id) { arr } else {
+      if arr.contains(user_id) {
+        arr
+      } else {
         let new_arr = arr.copy()
         new_arr.push(user_id)
         new_arr
@@ -97,7 +99,7 @@ pub fn RealtimeState::add_typing_user(
 pub fn RealtimeState::remove_typing_user(
   self : RealtimeState,
   ticket_id : String,
-  user_id : String
+  user_id : String,
 ) -> RealtimeState {
   let typing = self.typing_users
   match typing.get(ticket_id) {
@@ -118,7 +120,7 @@ pub fn RealtimeState::remove_typing_user(
 /// Get typing users for a ticket
 pub fn RealtimeState::get_typing_users(
   self : RealtimeState,
-  ticket_id : String
+  ticket_id : String,
 ) -> Array[String] {
   match self.typing_users.get(ticket_id) {
     Some(users) => users
@@ -135,10 +137,10 @@ pub fn RealtimeState::get_typing_users(
 pub(all) enum EventProcessResult {
   NoAction
   UpdateInbox
-  UpdateTimeline(String)          // ticket_id
-  UpdateWorkspace(String)         // ticket_id
-  UpdateAll(String)               // ticket_id
-  ShowNotification(String)        // message
+  UpdateTimeline(String) // ticket_id
+  UpdateWorkspace(String) // ticket_id
+  UpdateAll(String) // ticket_id
+  ShowNotification(String) // message
   Reconnect
 } derive(Show, Eq)
 
@@ -146,7 +148,7 @@ pub(all) enum EventProcessResult {
 /// Process a server event and determine required actions
 pub fn process_server_event(
   state : RealtimeState,
-  event : ServerEvent
+  event : ServerEvent,
 ) -> (RealtimeState, EventProcessResult) {
   match event {
     // Ticket events
@@ -154,12 +156,10 @@ pub fn process_server_event(
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateInbox)
     }
-
     TicketUpdated(ticket_id) => {
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateAll(ticket_id))
     }
-
     TicketClosed(ticket_id) => {
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateInbox)
@@ -170,7 +170,6 @@ pub fn process_server_event(
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateTimeline(ticket_id))
     }
-
     MessageUpdated(ticket_id, _message_id) => {
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateTimeline(ticket_id))
@@ -181,7 +180,6 @@ pub fn process_server_event(
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateWorkspace(ticket_id))
     }
-
     DraftPublished(ticket_id, _message_id) => {
       let new_state = state.mark_needs_sync(ticket_id)
       (new_state, UpdateAll(ticket_id))
@@ -190,7 +188,6 @@ pub fn process_server_event(
     // User events
     UserJoined(_user_id) => (state, NoAction)
     UserLeft(_user_id) => (state, NoAction)
-
     Typing(ticket_id, user_id) => {
       let new_state = state.add_typing_user(ticket_id, user_id)
       (new_state, NoAction)
@@ -202,9 +199,7 @@ pub fn process_server_event(
       let new_state = state.update_ws(ws)
       (new_state, NoAction)
     }
-
     Pong => (state, NoAction)
-
     Error(msg) => (state, ShowNotification(msg))
   }
 }
@@ -218,10 +213,9 @@ pub fn process_server_event(
 pub fn on_connected(state : RealtimeState) -> RealtimeState {
   let ws = state.ws_manager.set_state(Connected)
   // Re-subscribe to all tracked tickets
-  let ws_subscribed = state.subscribed_tickets().fold(
-    init=ws,
-    fn(manager, ticket_id) { manager.subscribe(ticket_id) },
-  )
+  let ws_subscribed = state
+    .subscribed_tickets()
+    .fold(init=ws, fn(manager, ticket_id) { manager.subscribe(ticket_id) })
   state.update_ws(ws_subscribed)
 }
 
@@ -264,7 +258,7 @@ fn RealtimeState::subscribed_tickets(self : RealtimeState) -> Array[String] {
 /// Subscribe to ticket updates (when ticket is selected)
 pub fn subscribe_to_ticket(
   state : RealtimeState,
-  ticket_id : String
+  ticket_id : String,
 ) -> RealtimeState {
   let ws = state.ws_manager.subscribe(ticket_id)
   state.update_ws(ws)
@@ -274,7 +268,7 @@ pub fn subscribe_to_ticket(
 /// Unsubscribe from ticket updates (when navigating away)
 pub fn unsubscribe_from_ticket(
   state : RealtimeState,
-  ticket_id : String
+  ticket_id : String,
 ) -> RealtimeState {
   let ws = state.ws_manager.unsubscribe(ticket_id)
   state.update_ws(ws)
@@ -286,20 +280,14 @@ pub fn unsubscribe_from_ticket(
 
 ///|
 /// Notify that current user started typing
-pub fn start_typing(
-  state : RealtimeState,
-  ticket_id : String
-) -> RealtimeState {
+pub fn start_typing(state : RealtimeState, ticket_id : String) -> RealtimeState {
   let ws = state.ws_manager.queue_event(StartTyping(ticket_id))
   state.update_ws(ws)
 }
 
 ///|
 /// Notify that current user stopped typing
-pub fn stop_typing(
-  state : RealtimeState,
-  ticket_id : String
-) -> RealtimeState {
+pub fn stop_typing(state : RealtimeState, ticket_id : String) -> RealtimeState {
   let ws = state.ws_manager.queue_event(StopTyping(ticket_id))
   state.update_ws(ws)
 }
@@ -330,25 +318,25 @@ pub fn AppState::initial(ws_url : String, user_id : String) -> AppState {
 /// Update view state
 pub fn AppState::update_view(
   self : AppState,
-  view : @ui.AppViewState
+  view : @ui.AppViewState,
 ) -> AppState {
-  { ..self, view }
+  { ..self, view, }
 }
 
 ///|
 /// Update realtime state
 pub fn AppState::update_realtime(
   self : AppState,
-  realtime : RealtimeState
+  realtime : RealtimeState,
 ) -> AppState {
-  { ..self, realtime }
+  { ..self, realtime, }
 }
 
 ///|
 /// Handle WebSocket connection status change
 pub fn AppState::on_connection_change(
   self : AppState,
-  connected : Bool
+  connected : Bool,
 ) -> AppState {
   let view = @ui.handle_set_connection_status(self.view, connected)
   let realtime = if connected {
@@ -361,10 +349,7 @@ pub fn AppState::on_connection_change(
 
 ///|
 /// Select ticket and subscribe to updates
-pub fn AppState::select_ticket(
-  self : AppState,
-  ticket_id : String
-) -> AppState {
+pub fn AppState::select_ticket(self : AppState, ticket_id : String) -> AppState {
   // Unsubscribe from previous ticket if any
   let realtime1 = if self.view.selected_ticket_id != "" {
     unsubscribe_from_ticket(self.realtime, self.view.selected_ticket_id)

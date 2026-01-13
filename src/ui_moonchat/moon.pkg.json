@@ -9,7 +9,7 @@
       "alias": "moonchat"
     },
     {
-      "path": "mizchi/luna/luna/static_dom/element",
+      "path": "mizchi/luna/luna/dom/element",
       "alias": "element"
     }
   ]

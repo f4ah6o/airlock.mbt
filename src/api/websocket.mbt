@@ -14,7 +14,7 @@ pub(all) enum ConnectionState {
   Connected
   Disconnecting
   Disconnected
-  Reconnecting(Int)  // Retry count
+  Reconnecting(Int) // Retry count
   Error(String)
 } derive(Show, Eq)
 
@@ -41,22 +41,22 @@ pub fn ConnectionState::can_send(self : ConnectionState) -> Bool {
 /// Events received from server via WebSocket
 pub(all) enum ServerEvent {
   // Ticket events
-  TicketCreated(String)           // ticket_id
-  TicketUpdated(String)           // ticket_id
-  TicketClosed(String)            // ticket_id
+  TicketCreated(String) // ticket_id
+  TicketUpdated(String) // ticket_id
+  TicketClosed(String) // ticket_id
 
   // Message events
-  NewMessage(String, String)      // ticket_id, message_id
-  MessageUpdated(String, String)  // ticket_id, message_id
+  NewMessage(String, String) // ticket_id, message_id
+  MessageUpdated(String, String) // ticket_id, message_id
 
   // Draft events
-  DraftStatusChanged(String, String, String)  // ticket_id, message_id, new_status
-  DraftPublished(String, String)              // ticket_id, message_id
+  DraftStatusChanged(String, String, String) // ticket_id, message_id, new_status
+  DraftPublished(String, String) // ticket_id, message_id
 
   // System events
-  UserJoined(String)              // user_id
-  UserLeft(String)                // user_id
-  Typing(String, String)          // ticket_id, user_id
+  UserJoined(String) // user_id
+  UserLeft(String) // user_id
+  Typing(String, String) // ticket_id, user_id
 
   // Connection events
   Ping
@@ -68,12 +68,12 @@ pub(all) enum ServerEvent {
 /// Events to send to server via WebSocket
 pub(all) enum ClientEvent {
   // Subscription management
-  Subscribe(String)               // ticket_id - subscribe to ticket updates
-  Unsubscribe(String)             // ticket_id - unsubscribe from ticket
+  Subscribe(String) // ticket_id - subscribe to ticket updates
+  Unsubscribe(String) // ticket_id - unsubscribe from ticket
 
   // Presence
-  StartTyping(String)             // ticket_id
-  StopTyping(String)              // ticket_id
+  StartTyping(String) // ticket_id
+  StopTyping(String) // ticket_id
 
   // Connection
   Ping
@@ -87,11 +87,11 @@ pub(all) enum ClientEvent {
 ///|
 /// WebSocket connection configuration
 pub(all) struct WebSocketConfig {
-  url : String                    // WebSocket server URL
-  reconnect_delay_ms : Int        // Base delay for reconnection
-  max_reconnect_attempts : Int    // Maximum reconnection attempts
-  ping_interval_ms : Int          // Ping interval for keep-alive
-  pong_timeout_ms : Int           // Timeout waiting for pong response
+  url : String // WebSocket server URL
+  reconnect_delay_ms : Int // Base delay for reconnection
+  max_reconnect_attempts : Int // Maximum reconnection attempts
+  ping_interval_ms : Int // Ping interval for keep-alive
+  pong_timeout_ms : Int // Timeout waiting for pong response
 } derive(Show, Eq)
 
 ///|
@@ -136,10 +136,10 @@ pub fn WebSocketManager::new(config : WebSocketConfig) -> WebSocketManager {
 /// Update connection state
 pub fn WebSocketManager::set_state(
   self : WebSocketManager,
-  state : ConnectionState
+  state : ConnectionState,
 ) -> WebSocketManager {
   let new_reconnect = match state {
-    Connected => 0  // Reset on successful connection
+    Connected => 0 // Reset on successful connection
     Reconnecting(n) => n
     _ => self.reconnect_count
   }
@@ -150,7 +150,7 @@ pub fn WebSocketManager::set_state(
 /// Subscribe to ticket updates
 pub fn WebSocketManager::subscribe(
   self : WebSocketManager,
-  ticket_id : String
+  ticket_id : String,
 ) -> WebSocketManager {
   if self.subscribed_tickets.contains(ticket_id) {
     return self
@@ -166,7 +166,7 @@ pub fn WebSocketManager::subscribe(
 /// Unsubscribe from ticket updates
 pub fn WebSocketManager::unsubscribe(
   self : WebSocketManager,
-  ticket_id : String
+  ticket_id : String,
 ) -> WebSocketManager {
   let tickets = self.subscribed_tickets.filter(fn(id) { id != ticket_id })
   let events = self.pending_events.copy()
@@ -178,7 +178,7 @@ pub fn WebSocketManager::unsubscribe(
 /// Queue an event to send
 pub fn WebSocketManager::queue_event(
   self : WebSocketManager,
-  event : ClientEvent
+  event : ClientEvent,
 ) -> WebSocketManager {
   let events = self.pending_events.copy()
   events.push(event)
@@ -188,7 +188,7 @@ pub fn WebSocketManager::queue_event(
 ///|
 /// Clear pending events (after successful send)
 pub fn WebSocketManager::clear_pending(
-  self : WebSocketManager
+  self : WebSocketManager,
 ) -> WebSocketManager {
   { ..self, pending_events: [] }
 }
@@ -196,7 +196,7 @@ pub fn WebSocketManager::clear_pending(
 ///|
 /// Get pending events
 pub fn WebSocketManager::get_pending_events(
-  self : WebSocketManager
+  self : WebSocketManager,
 ) -> Array[ClientEvent] {
   self.pending_events
 }
@@ -216,15 +216,19 @@ pub fn WebSocketManager::should_reconnect(self : WebSocketManager) -> Bool {
 pub fn WebSocketManager::get_reconnect_delay(self : WebSocketManager) -> Int {
   // Exponential backoff: delay * 2^attempt (capped at 30 seconds)
   let base = self.config.reconnect_delay_ms
-  let multiplier = 1 << self.reconnect_count  // 2^n
+  let multiplier = 1 << self.reconnect_count // 2^n
   let delay = base * multiplier
-  if delay > 30000 { 30000 } else { delay }
+  if delay > 30000 {
+    30000
+  } else {
+    delay
+  }
 }
 
 ///|
 /// Increment reconnect counter
 pub fn WebSocketManager::increment_reconnect(
-  self : WebSocketManager
+  self : WebSocketManager,
 ) -> WebSocketManager {
   {
     ..self,

@@ -56,10 +56,14 @@ pub fn direct_message_to_normalized(
   config : AdapterConfig,
   message : @direct_types.ReceivedMessage,
 ) -> NormalizedMessage {
-  let channel_id = if message.room_id != "" { message.room_id } else {
+  let channel_id = if message.room_id != "" {
+    message.room_id
+  } else {
     message.talk_id
   }
-  let sender_name = if message.user_id == "" { "unknown" } else {
+  let sender_name = if message.user_id == "" {
+    "unknown"
+  } else {
     message.user_id
   }
   let raw_data = match message.raw {
@@ -123,7 +127,7 @@ pub async fn DirectAdapter::connect(
   tasks : @async.TaskGroup[Unit],
 ) -> Result[Unit, AdapterError] {
   self.state = AdapterState::Connecting
-  match await @rpc_client.connect(self.client, tasks) {
+  match @rpc_client.connect(self.client, tasks) {
     Ok(_) => {
       self.state = AdapterState::Connected
       Ok(())
@@ -140,7 +144,7 @@ pub async fn DirectAdapter::connect(
 pub async fn DirectAdapter::disconnect(
   self : DirectAdapter,
 ) -> Result[Unit, AdapterError] {
-  match await @rpc_client.close(self.client) {
+  match @rpc_client.close(self.client) {
     Ok(_) => {
       self.state = AdapterState::Disconnected
       Ok(())
@@ -164,8 +168,7 @@ pub async fn DirectAdapter::send_outbound(
   if message.attachments.length() > 0 {
     return Err(MessageTooLong("Direct adapter does not support attachments"))
   }
-  match await
-    @rpc_client.send_text(self.client, message.channel_id, message.text) {
+  match @rpc_client.send_text(self.client, message.channel_id, message.text) {
     Ok(_) => Ok(SendResult::success("", ""))
     Err(e) => Err(direct_error_to_adapter_error(e))
   }

@@ -52,14 +52,14 @@ test "RealtimeState typing users" {
 ///|
 test "process_server_event ticket events" {
   let state = RealtimeState::new("ws://test")
-
-  let (new_state, result) = process_server_event(state, TicketCreated("tkt_001"))
+  let (new_state, result) = process_server_event(
+    state,
+    TicketCreated("tkt_001"),
+  )
   assert_true(new_state.pending_syncs.contains("tkt_001"))
   assert_eq(result, UpdateInbox)
-
   let (_, result2) = process_server_event(state, TicketUpdated("tkt_001"))
   assert_eq(result2, UpdateAll("tkt_001"))
-
   let (_, result3) = process_server_event(state, TicketClosed("tkt_001"))
   assert_eq(result3, UpdateInbox)
 }
@@ -67,8 +67,10 @@ test "process_server_event ticket events" {
 ///|
 test "process_server_event message events" {
   let state = RealtimeState::new("ws://test")
-
-  let (new_state, result) = process_server_event(state, NewMessage("tkt_001", "msg_001"))
+  let (new_state, result) = process_server_event(
+    state,
+    NewMessage("tkt_001", "msg_001"),
+  )
   assert_true(new_state.pending_syncs.contains("tkt_001"))
   assert_eq(result, UpdateTimeline("tkt_001"))
 }
@@ -76,13 +78,11 @@ test "process_server_event message events" {
 ///|
 test "process_server_event draft events" {
   let state = RealtimeState::new("ws://test")
-
   let (_, result) = process_server_event(
     state,
     DraftStatusChanged("tkt_001", "msg_001", "checked"),
   )
   assert_eq(result, UpdateWorkspace("tkt_001"))
-
   let (_, result2) = process_server_event(
     state,
     DraftPublished("tkt_001", "msg_001"),
@@ -93,7 +93,6 @@ test "process_server_event draft events" {
 ///|
 test "process_server_event ping" {
   let state = RealtimeState::new("ws://test")
-
   let (new_state, result) = process_server_event(state, ServerEvent::Ping)
   assert_eq(result, NoAction)
   // Should queue a pong
@@ -103,7 +102,6 @@ test "process_server_event ping" {
 ///|
 test "process_server_event typing" {
   let state = RealtimeState::new("ws://test")
-
   let (new_state, result) = process_server_event(
     state,
     Typing("tkt_001", "user_001"),
@@ -133,7 +131,10 @@ test "on_disconnected" {
 test "on_error" {
   let state = RealtimeState::new("ws://test")
   let error_state = on_error(state, "Connection failed")
-  assert_eq(error_state.ws_manager.state, ConnectionState::Error("Connection failed"))
+  assert_eq(
+    error_state.ws_manager.state,
+    ConnectionState::Error("Connection failed"),
+  )
 }
 
 ///|
@@ -154,10 +155,8 @@ test "unsubscribe_from_ticket" {
 ///|
 test "start_typing and stop_typing" {
   let state = RealtimeState::new("ws://test")
-
   let typing = start_typing(state, "tkt_001")
   assert_true(typing.ws_manager.pending_events.length() > 0)
-
   let stopped = stop_typing(state, "tkt_001")
   assert_true(stopped.ws_manager.pending_events.length() > 0)
 }
@@ -173,26 +172,30 @@ test "AppState initial" {
 ///|
 test "AppState on_connection_change" {
   let state = AppState::initial("ws://test", "user_001")
-
   let connected = state.on_connection_change(true)
   assert_true(connected.view.is_connected)
   assert_eq(connected.realtime.ws_manager.state, ConnectionState::Connected)
-
   let disconnected = connected.on_connection_change(false)
   assert_false(disconnected.view.is_connected)
-  assert_eq(disconnected.realtime.ws_manager.state, ConnectionState::Disconnected)
+  assert_eq(
+    disconnected.realtime.ws_manager.state,
+    ConnectionState::Disconnected,
+  )
 }
 
 ///|
 test "AppState select_ticket" {
   let state = AppState::initial("ws://test", "user_001")
-
   let selected = state.select_ticket("tkt_001")
   assert_eq(selected.view.selected_ticket_id, "tkt_001")
-  assert_true(selected.realtime.ws_manager.subscribed_tickets.contains("tkt_001"))
+  assert_true(
+    selected.realtime.ws_manager.subscribed_tickets.contains("tkt_001"),
+  )
 
   // Select another ticket
   let selected2 = selected.select_ticket("tkt_002")
   assert_eq(selected2.view.selected_ticket_id, "tkt_002")
-  assert_true(selected2.realtime.ws_manager.subscribed_tickets.contains("tkt_002"))
+  assert_true(
+    selected2.realtime.ws_manager.subscribed_tickets.contains("tkt_002"),
+  )
 }

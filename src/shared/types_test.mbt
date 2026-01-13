@@ -22,7 +22,11 @@ test "DraftStatus to_string" {
 
 ///|
 test "Attachment creation" {
-  let attachment = Attachment::new(AttachmentType::Image, "https://example.com/img.png", "screenshot.png")
+  let attachment = Attachment::new(
+    AttachmentType::Image,
+    "https://example.com/img.png",
+    "screenshot.png",
+  )
   assert_eq(attachment.attachment_type, AttachmentType::Image)
   assert_eq(attachment.url, "https://example.com/img.png")
   assert_eq(attachment.name, "screenshot.png")
@@ -41,7 +45,14 @@ test "Ticket creation" {
 
 ///|
 test "Message creation" {
-  let msg = Message::new("msg_001", "tkt_001", "Hello", Visibility::Public, Origin::ChatA, "user_001")
+  let msg = Message::new(
+    "msg_001",
+    "tkt_001",
+    "Hello",
+    Visibility::Public,
+    Origin::ChatA,
+    "user_001",
+  )
   assert_eq(msg.message_id, "msg_001")
   assert_eq(msg.ticket_id, "tkt_001")
   assert_eq(msg.visibility, Visibility::Public)
@@ -51,7 +62,9 @@ test "Message creation" {
 
 ///|
 test "Draft message creation" {
-  let draft = Message::new_draft("msg_002", "tkt_001", "Draft reply", "admin_001", "uuid_123")
+  let draft = Message::new_draft(
+    "msg_002", "tkt_001", "Draft reply", "admin_001", "uuid_123",
+  )
   assert_eq(draft.is_draft, true)
   assert_eq(draft.draft_status, DraftStatus::Pending)
   assert_eq(draft.visibility, Visibility::Internal)
@@ -61,7 +74,9 @@ test "Draft message creation" {
 
 ///|
 test "Note message creation" {
-  let note = Message::new_note("msg_003", "tkt_001", "Internal note", "admin_001")
+  let note = Message::new_note(
+    "msg_003", "tkt_001", "Internal note", "admin_001",
+  )
   assert_eq(note.is_draft, false)
   assert_eq(note.visibility, Visibility::Internal)
   assert_eq(note.origin, Origin::Console)
@@ -71,7 +86,6 @@ test "Note message creation" {
 test "User creation" {
   let user = User::new("user_001", "John Doe", "john@example.com")
   assert_eq(user.is_admin, false)
-
   let admin = User::new_admin("admin_001", "Admin User", "admin@example.com")
   assert_eq(admin.is_admin, true)
 }
@@ -81,7 +95,6 @@ test "AICheckResult creation" {
   let pass = AICheckResult::pass()
   assert_eq(pass.passed, true)
   assert_eq(pass.warnings.length(), 0)
-
   let fail = AICheckResult::fail(["Warning 1", "Warning 2"])
   assert_eq(fail.passed, false)
   assert_eq(fail.warnings.length(), 2)

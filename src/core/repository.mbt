@@ -23,10 +23,12 @@ pub fn TicketRepository::new() -> TicketRepository {
 /// Create a ticket
 pub fn TicketRepository::create(
   self : TicketRepository,
-  ticket : @shared.Ticket
+  ticket : @shared.Ticket,
 ) -> Result[Unit, RepositoryError] {
   if self.tickets.contains(ticket.ticket_id) {
-    return Err(DuplicateKey("Ticket with ID \{ticket.ticket_id} already exists"))
+    return Err(
+      DuplicateKey("Ticket with ID \{ticket.ticket_id} already exists"),
+    )
   }
   self.tickets.set(ticket.ticket_id, ticket)
   Ok(())
@@ -36,7 +38,7 @@ pub fn TicketRepository::create(
 /// Get a ticket by ID
 pub fn TicketRepository::get(
   self : TicketRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Result[@shared.Ticket, RepositoryError] {
   match self.tickets.get(ticket_id) {
     Some(ticket) => Ok(ticket)
@@ -48,7 +50,7 @@ pub fn TicketRepository::get(
 /// Update a ticket with optimistic locking
 pub fn TicketRepository::update(
   self : TicketRepository,
-  ticket : @shared.Ticket
+  ticket : @shared.Ticket,
 ) -> Result[Unit, RepositoryError] {
   match self.tickets.get(ticket.ticket_id) {
     None => Err(NotFound("Ticket \{ticket.ticket_id} not found"))
@@ -60,7 +62,10 @@ pub fn TicketRepository::update(
           ),
         )
       } else {
-        let updated = @shared.Ticket::{ ..ticket, lock_version: ticket.lock_version + 1 }
+        let updated = @shared.Ticket::{
+          ..ticket,
+          lock_version: ticket.lock_version + 1,
+        }
         self.tickets.set(ticket.ticket_id, updated)
         Ok(())
       }
@@ -71,7 +76,7 @@ pub fn TicketRepository::update(
 /// Delete a ticket
 pub fn TicketRepository::delete(
   self : TicketRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Result[Unit, RepositoryError] {
   if not(self.tickets.contains(ticket_id)) {
     return Err(NotFound("Ticket \{ticket_id} not found"))
@@ -82,9 +87,7 @@ pub fn TicketRepository::delete(
 
 ///|
 /// List all tickets
-pub fn TicketRepository::list(
-  self : TicketRepository
-) -> Array[@shared.Ticket] {
+pub fn TicketRepository::list(self : TicketRepository) -> Array[@shared.Ticket] {
   self.tickets.values().collect()
 }
 
@@ -92,7 +95,7 @@ pub fn TicketRepository::list(
 /// List tickets by status
 pub fn TicketRepository::list_by_status(
   self : TicketRepository,
-  status : @shared.TicketStatus
+  status : @shared.TicketStatus,
 ) -> Array[@shared.Ticket] {
   self.tickets.values().filter(fn(t) { t.status == status }).collect()
 }
@@ -117,7 +120,7 @@ pub fn MessageRepository::new() -> MessageRepository {
 /// Create a message
 pub fn MessageRepository::create(
   self : MessageRepository,
-  message : @shared.Message
+  message : @shared.Message,
 ) -> Result[Unit, RepositoryError] {
   // Check duplicate message ID
   if self.messages.contains(message.message_id) {
@@ -156,7 +159,7 @@ pub fn MessageRepository::create(
 /// Get a message by ID
 pub fn MessageRepository::get(
   self : MessageRepository,
-  message_id : String
+  message_id : String,
 ) -> Result[@shared.Message, RepositoryError] {
   match self.messages.get(message_id) {
     Some(msg) => Ok(msg)
@@ -168,7 +171,7 @@ pub fn MessageRepository::get(
 /// Get message by idempotency key
 pub fn MessageRepository::get_by_idempotency_key(
   self : MessageRepository,
-  key : String
+  key : String,
 ) -> @shared.Message? {
   match self.idempotency_keys.get(key) {
     Some(msg_id) => self.messages.get(msg_id)
@@ -180,7 +183,7 @@ pub fn MessageRepository::get_by_idempotency_key(
 /// Update a message
 pub fn MessageRepository::update(
   self : MessageRepository,
-  message : @shared.Message
+  message : @shared.Message,
 ) -> Result[Unit, RepositoryError] {
   if not(self.messages.contains(message.message_id)) {
     return Err(NotFound("Message \{message.message_id} not found"))
@@ -193,7 +196,7 @@ pub fn MessageRepository::update(
 /// Delete a message
 pub fn MessageRepository::delete(
   self : MessageRepository,
-  message_id : String
+  message_id : String,
 ) -> Result[Unit, RepositoryError] {
   match self.messages.get(message_id) {
     None => Err(NotFound("Message \{message_id} not found"))
@@ -220,15 +223,12 @@ pub fn MessageRepository::delete(
 /// List all messages for a ticket
 pub fn MessageRepository::list_by_ticket(
   self : MessageRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Array[@shared.Message] {
   match self.by_ticket.get(ticket_id) {
     None => []
     Some(ids) =>
-      ids
-      .iter()
-      .filter_map(fn(id) { self.messages.get(id) })
-      .collect()
+      ids.iter().filter_map(fn(id) { self.messages.get(id) }).collect()
   }
 }
 
@@ -236,7 +236,7 @@ pub fn MessageRepository::list_by_ticket(
 /// List public messages for a ticket (Timeline view)
 pub fn MessageRepository::list_public_by_ticket(
   self : MessageRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Array[@shared.Message] {
   self
   .list_by_ticket(ticket_id)
@@ -247,7 +247,7 @@ pub fn MessageRepository::list_public_by_ticket(
 /// List all messages for workspace view (internal + public)
 pub fn MessageRepository::list_workspace_by_ticket(
   self : MessageRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Array[@shared.Message] {
   self.list_by_ticket(ticket_id)
 }
@@ -256,7 +256,7 @@ pub fn MessageRepository::list_workspace_by_ticket(
 /// List draft messages for a ticket
 pub fn MessageRepository::list_drafts_by_ticket(
   self : MessageRepository,
-  ticket_id : String
+  ticket_id : String,
 ) -> Array[@shared.Message] {
   self.list_by_ticket(ticket_id).filter(fn(m) { m.is_draft })
 }
@@ -265,7 +265,7 @@ pub fn MessageRepository::list_drafts_by_ticket(
 /// Check if idempotency key exists
 pub fn MessageRepository::has_idempotency_key(
   self : MessageRepository,
-  key : String
+  key : String,
 ) -> Bool {
   self.idempotency_keys.contains(key)
 }

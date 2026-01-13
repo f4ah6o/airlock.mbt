@@ -10,23 +10,23 @@
 /// All possible UI actions
 pub(all) enum UIAction {
   // Inbox actions
-  SelectTicket(String)              // ticket_id
+  SelectTicket(String) // ticket_id
   FilterTickets(@shared.TicketStatus)
   RefreshInbox
 
   // Timeline actions (read-only, no direct input)
-  ScrollToMessage(String)           // message_id
+  ScrollToMessage(String) // message_id
 
   // Workspace actions
   SetEditorMode(EditorMode)
   UpdateEditorText(String)
-  SubmitNote                        // Submit internal note
-  SubmitDraft                       // Submit draft for AI check
-  EditDraft(String)                 // Edit existing draft (message_id)
-  RequestRecheck(String)            // Recheck draft (message_id)
-  ShowPublishConfirm(String)        // Show publish modal (message_id)
+  SubmitNote // Submit internal note
+  SubmitDraft // Submit draft for AI check
+  EditDraft(String) // Edit existing draft (message_id)
+  RequestRecheck(String) // Recheck draft (message_id)
+  ShowPublishConfirm(String) // Show publish modal (message_id)
   HidePublishConfirm
-  ConfirmPublish(String, String)    // Confirm publish (message_id, idempotency_key)
+  ConfirmPublish(String, String) // Confirm publish (message_id, idempotency_key)
 
   // Global actions
   DismissError
@@ -92,7 +92,7 @@ pub fn validate_submit_draft(text : String) -> ActionResult {
 /// Validate publish action
 pub fn validate_publish(
   draft : @shared.Message,
-  idempotency_key : String
+  idempotency_key : String,
 ) -> ActionResult {
   if not(draft.is_draft) {
     return StateError("Cannot publish a non-draft message")
@@ -119,12 +119,12 @@ pub fn validate_publish(
 /// Handle select ticket action - updates view state
 pub fn handle_select_ticket(
   state : AppViewState,
-  ticket_id : String
+  ticket_id : String,
 ) -> AppViewState {
   // Update inbox selection
-  let updated_tickets = state.inbox.tickets.map(
-    fn(item) { { ..item, is_selected: item.ticket_id == ticket_id } },
-  )
+  let updated_tickets = state.inbox.tickets.map(fn(item) {
+    { ..item, is_selected: item.ticket_id == ticket_id }
+  })
   let updated_inbox = { ..state.inbox, tickets: updated_tickets }
 
   // Clear workspace for new ticket
@@ -132,7 +132,6 @@ pub fn handle_select_ticket(
 
   // Clear timeline for new ticket
   let updated_timeline = TimelinePaneState::initial()
-
   {
     ..state,
     inbox: updated_inbox,
@@ -147,7 +146,7 @@ pub fn handle_select_ticket(
 /// Handle filter tickets action
 pub fn handle_filter_tickets(
   state : AppViewState,
-  status : @shared.TicketStatus
+  status : @shared.TicketStatus,
 ) -> AppViewState {
   let updated_inbox = { ..state.inbox, filter_status: status, is_loading: true }
   { ..state, inbox: updated_inbox }
@@ -157,7 +156,7 @@ pub fn handle_filter_tickets(
 /// Handle editor mode change
 pub fn handle_set_editor_mode(
   state : AppViewState,
-  mode : EditorMode
+  mode : EditorMode,
 ) -> AppViewState {
   let updated_workspace = { ..state.workspace, editor_mode: mode }
   { ..state, workspace: updated_workspace }
@@ -167,7 +166,7 @@ pub fn handle_set_editor_mode(
 /// Handle editor text update
 pub fn handle_update_editor_text(
   state : AppViewState,
-  text : String
+  text : String,
 ) -> AppViewState {
   let updated_workspace = { ..state.workspace, editor_text: text }
   { ..state, workspace: updated_workspace }
@@ -179,7 +178,7 @@ pub fn handle_show_publish_confirm(
   state : AppViewState,
   draft : @shared.Message,
   target_channel : String,
-  idempotency_key : String
+  idempotency_key : String,
 ) -> AppViewState {
   let modal = PublishModalState::show(draft, target_channel, idempotency_key)
   { ..state, publish_modal: modal }
@@ -201,7 +200,7 @@ pub fn handle_dismiss_error(state : AppViewState) -> AppViewState {
 /// Handle set connection status
 pub fn handle_set_connection_status(
   state : AppViewState,
-  connected : Bool
+  connected : Bool,
 ) -> AppViewState {
   { ..state, is_connected: connected }
 }
@@ -217,7 +216,7 @@ pub fn set_inbox_loading(state : AppViewState, loading : Bool) -> AppViewState {
 /// Set loading state for timeline
 pub fn set_timeline_loading(
   state : AppViewState,
-  loading : Bool
+  loading : Bool,
 ) -> AppViewState {
   let updated_timeline = { ..state.timeline, is_loading: loading }
   { ..state, timeline: updated_timeline }
@@ -227,7 +226,7 @@ pub fn set_timeline_loading(
 /// Set submitting state for workspace
 pub fn set_workspace_submitting(
   state : AppViewState,
-  submitting : Bool
+  submitting : Bool,
 ) -> AppViewState {
   let updated_workspace = { ..state.workspace, is_submitting: submitting }
   { ..state, workspace: updated_workspace }
@@ -243,7 +242,7 @@ pub fn set_error(state : AppViewState, message : String) -> AppViewState {
 /// Update inbox with ticket list
 pub fn update_inbox_tickets(
   state : AppViewState,
-  tickets : Array[TicketListItem]
+  tickets : Array[TicketListItem],
 ) -> AppViewState {
   let updated_inbox = { ..state.inbox, tickets, is_loading: false }
   { ..state, inbox: updated_inbox }
@@ -254,7 +253,7 @@ pub fn update_inbox_tickets(
 pub fn update_timeline_messages(
   state : AppViewState,
   messages : Array[TimelineMessage],
-  subject : String
+  subject : String,
 ) -> AppViewState {
   let updated_timeline : TimelinePaneState = {
     messages,
@@ -268,9 +267,9 @@ pub fn update_timeline_messages(
 /// Update workspace with items
 pub fn update_workspace_items(
   state : AppViewState,
-  items : Array[WorkspaceItem]
+  items : Array[WorkspaceItem],
 ) -> AppViewState {
-  let updated_workspace = { ..state.workspace, items }
+  let updated_workspace = { ..state.workspace, items, }
   { ..state, workspace: updated_workspace }
 }
 
@@ -278,7 +277,7 @@ pub fn update_workspace_items(
 /// Update review panel
 pub fn update_review_panel(
   state : AppViewState,
-  panel : ReviewPanelState
+  panel : ReviewPanelState,
 ) -> AppViewState {
   let updated_workspace = { ..state.workspace, review_panel: panel }
   { ..state, workspace: updated_workspace }

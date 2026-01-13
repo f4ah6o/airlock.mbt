@@ -10,42 +10,55 @@
 /// Primary colors
 pub let color_primary : String = "#1a73e8"
 
+///|
 pub let color_primary_hover : String = "#1557b0"
 
+///|
 pub let color_secondary : String = "#5f6368"
 
 ///|
 /// Background colors
-pub let bg_workspace : String = "#fffbe6"         // Warning/workspace zone
+pub let bg_workspace : String = "#fffbe6" // Warning/workspace zone
 
+///|
 pub let bg_inbox : String = "#f8f9fa"
 
+///|
 pub let bg_timeline : String = "#ffffff"
 
+///|
 pub let bg_selected : String = "#e8f0fe"
 
+///|
 pub let bg_hover : String = "#f1f3f4"
 
 ///|
 /// Status colors
 pub let color_success : String = "#34a853"
 
+///|
 pub let color_warning : String = "#fbbc04"
 
+///|
 pub let color_error : String = "#ea4335"
 
+///|
 pub let color_info : String = "#4285f4"
 
 ///|
 /// Draft status colors
 pub let draft_pending_color : String = "#9e9e9e"
 
+///|
 pub let draft_checking_color : String = "#ffc107"
 
+///|
 pub let draft_checked_color : String = "#4caf50"
 
+///|
 pub let draft_rejected_color : String = "#f44336"
 
+///|
 pub let draft_published_color : String = "#2196f3"
 
 /// =============================================================================
@@ -56,20 +69,26 @@ pub let draft_published_color : String = "#2196f3"
 /// Pane widths (percentages)
 pub let pane_inbox_width : Int = 25
 
+///|
 pub let pane_timeline_width : Int = 40
 
+///|
 pub let pane_workspace_width : Int = 35
 
 ///|
 /// Common dimensions
 pub let header_height : String = "56px"
 
+///|
 pub let message_padding : String = "12px"
 
+///|
 pub let border_radius : String = "8px"
 
+///|
 pub let shadow_light : String = "0 1px 2px rgba(0,0,0,0.1)"
 
+///|
 pub let shadow_medium : String = "0 2px 8px rgba(0,0,0,0.15)"
 
 /// =============================================================================
@@ -80,40 +99,54 @@ pub let shadow_medium : String = "0 2px 8px rgba(0,0,0,0.15)"
 /// Layout classes
 pub let class_app_container : String = "airlock-app"
 
+///|
 pub let class_pane : String = "airlock-pane"
 
+///|
 pub let class_pane_inbox : String = "airlock-pane-inbox"
 
+///|
 pub let class_pane_timeline : String = "airlock-pane-timeline"
 
+///|
 pub let class_pane_workspace : String = "airlock-pane-workspace"
 
 ///|
 /// Component classes
 pub let class_ticket_item : String = "airlock-ticket-item"
 
+///|
 pub let class_ticket_selected : String = "airlock-ticket-selected"
 
+///|
 pub let class_message_bubble : String = "airlock-message"
 
+///|
 pub let class_message_user : String = "airlock-message-user"
 
+///|
 pub let class_message_support : String = "airlock-message-support"
 
+///|
 pub let class_draft_editor : String = "airlock-draft-editor"
 
+///|
 pub let class_review_panel : String = "airlock-review-panel"
 
+///|
 pub let class_publish_modal : String = "airlock-publish-modal"
 
 ///|
 /// State classes
 pub let class_loading : String = "airlock-loading"
 
+///|
 pub let class_error : String = "airlock-error"
 
+///|
 pub let class_success : String = "airlock-success"
 
+///|
 pub let class_disabled : String = "airlock-disabled"
 
 /// =============================================================================
@@ -124,17 +157,19 @@ pub let class_disabled : String = "airlock-disabled"
 /// Generate inline style string from key-value pairs
 pub fn inline_style(styles : Array[(String, String)]) -> String {
   styles
-  .map(fn(pair) { let (k, v) = pair; "\{k}: \{v};" })
+  .map(fn(pair) {
+    let (k, v) = pair
+    "\{k}: \{v};"
+  })
   .fold(init="", fn(acc, s) { acc + s })
 }
 
 ///|
 /// Generate class attribute string from class names
 pub fn classes(class_names : Array[String]) -> String {
-  class_names.filter(fn(c) { c != "" }).fold(
-    init="",
-    fn(acc, c) { if acc == "" { c } else { acc + " " + c } },
-  )
+  class_names
+  .filter(fn(c) { c != "" })
+  .fold(init="", fn(acc, c) { if acc == "" { c } else { acc + " " + c } })
 }
 
 ///|

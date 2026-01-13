@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/src/ui_moonchat"
+
+import(
+  "airlock/airlock/src/ui"
+  "f4ah6o/moonchat/core"
+  "mizchi/luna/luna/dom/element"
+)
+
+// Values
+pub fn new_timeline_store(Array[@ui.TimelineMessage]) -> @core.ChatStore
+
+pub fn new_workspace_store(Array[@ui.WorkspaceItem]) -> @core.ChatStore
+
+pub fn set_timeline_messages(@core.ChatStore, Array[@ui.TimelineMessage]) -> Unit
+
+pub fn set_workspace_messages(@core.ChatStore, Array[@ui.WorkspaceItem]) -> Unit
+
+pub fn sync_connection(@core.ChatStore, Bool) -> Unit
+
+pub fn timeline_message_to_moonchat(@ui.TimelineMessage) -> @core.Message
+
+pub fn timeline_view(@core.ChatStore, self_id? : String) -> @element.DomNode
+
+pub fn workspace_item_to_moonchat(@ui.WorkspaceItem) -> @core.Message
+
+pub fn workspace_view(@core.ChatStore, (String) -> Unit, self_id? : String, placeholder? : String, disabled? : Bool) -> @element.DomNode
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

@@ -1,17 +1,22 @@
 ///|
-using @element { div }
+using @element {div}
 
 ///|
 fn parse_timestamp_ms(timestamp : String) -> Int64 {
-  match try? @strconv.parse_int64(timestamp, base=10) {
-    Ok(value) => value
-    Err(_) => 0L
+  try @strconv.parse_int64(timestamp, base=10) catch {
+    _ => 0L
+  } noraise {
+    value => value
   }
 }
 
 ///|
 fn attachment_line(att : @ui.AttachmentView) -> String {
-  if att.name == "" { "- " + att.url } else { "- " + att.name + " (" + att.url + ")" }
+  if att.name == "" {
+    "- " + att.url
+  } else {
+    "- " + att.name + " (" + att.url + ")"
+  }
 }
 
 ///|
@@ -20,15 +25,13 @@ fn attachments_block(attachments : Array[@ui.AttachmentView]) -> String {
 }
 
 ///|
-fn timeline_content(
-  message : @ui.TimelineMessage,
-) -> @moonchat.MessageContent {
+fn timeline_content(message : @ui.TimelineMessage) -> @moonchat.MessageContent {
   let attachments = message.attachments
   if attachments.length() == 1 && message.text == "" {
     let att = attachments[0]
     if att.attachment_type == "image" {
       let caption = if att.name == "" { None } else { Some(att.name) }
-      return @moonchat.MessageContent::Image(url=att.url, caption=caption)
+      return @moonchat.MessageContent::Image(url=att.url, caption~)
     }
   }
   if attachments.length() > 0 {
@@ -44,9 +47,7 @@ fn timeline_content(
 }
 
 ///|
-fn timeline_status(
-  message : @ui.TimelineMessage,
-) -> @moonchat.MessageStatus {
+fn timeline_status(message : @ui.TimelineMessage) -> @moonchat.MessageStatus {
   if message.is_from_user {
     @moonchat.MessageStatus::Delivered
   } else {
@@ -73,23 +74,29 @@ pub fn timeline_message_to_moonchat(
     user,
     content,
     timestamp_ms,
-    status= status,
+    status~,
   )
 }
 
 ///|
-fn append_section(body : String, title : String, items : Array[String]) -> String {
+fn append_section(
+  body : String,
+  title : String,
+  items : Array[String],
+) -> String {
   if items.is_empty() {
     return body
   }
   let section = title + ":\n" + items.map(fn(item) { "- " + item }).join("\n")
-  if body == "" { section } else { body + "\n\n" + section }
+  if body == "" {
+    section
+  } else {
+    body + "\n\n" + section
+  }
 }
 
 ///|
-fn workspace_content(
-  item : @ui.WorkspaceItem,
-) -> @moonchat.MessageContent {
+fn workspace_content(item : @ui.WorkspaceItem) -> @moonchat.MessageContent {
   let mut body = item.text
   body = append_section(body, "Warnings", item.ai_warnings)
   body = append_section(body, "Suggestions", item.ai_suggestions)
@@ -101,9 +108,7 @@ fn workspace_content(
 }
 
 ///|
-fn workspace_status(
-  item : @ui.WorkspaceItem,
-) -> @moonchat.MessageStatus {
+fn workspace_status(item : @ui.WorkspaceItem) -> @moonchat.MessageStatus {
   match item.draft_status {
     "published" => @moonchat.MessageStatus::Read
     "checked" => @moonchat.MessageStatus::Delivered
@@ -122,13 +127,7 @@ pub fn workspace_item_to_moonchat(
   let content = workspace_content(item)
   let timestamp_ms = parse_timestamp_ms(item.timestamp)
   let status = workspace_status(item)
-  @moonchat.new_message(
-    item.message_id,
-    user,
-    content,
-    timestamp_ms,
-    status= status,
-  )
+  @moonchat.new_message(item.message_id, user, content, timestamp_ms, status~)
 }
 
 ///|

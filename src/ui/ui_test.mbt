@@ -44,7 +44,6 @@ test "AppUIState show/hide publish modal" {
   let state = AppUIState::initial()
   let shown = state.show_publish_confirm()
   assert_eq(shown.show_publish_modal, true)
-
   let hidden = shown.hide_publish_confirm()
   assert_eq(hidden.show_publish_modal, false)
 }
@@ -54,7 +53,6 @@ test "AppUIState error handling" {
   let state = AppUIState::initial()
   let with_error = state.set_error("Something went wrong")
   assert_eq(with_error.error_message, "Something went wrong")
-
   let cleared = with_error.clear_error()
   assert_eq(cleared.error_message, "")
 }
@@ -160,7 +158,9 @@ test "validate_submit_note" {
 test "validate_submit_draft" {
   assert_true(validate_submit_draft("").is_success() |> not)
   assert_true(validate_submit_draft("Short").is_success() |> not)
-  assert_true(validate_submit_draft("This is a valid draft message").is_success())
+  assert_true(
+    validate_submit_draft("This is a valid draft message").is_success(),
+  )
 }
 
 ///|
@@ -186,7 +186,10 @@ test "handle_update_editor_text" {
 
 ///|
 test "handle_dismiss_error" {
-  let state = AppViewState::{ ..AppViewState::initial(), error_message: "Error!" }
+  let state = AppViewState::{
+    ..AppViewState::initial(),
+    error_message: "Error!",
+  }
   let updated = handle_dismiss_error(state)
   assert_eq(updated.error_message, "")
 }
@@ -196,7 +199,6 @@ test "handle_set_connection_status" {
   let state = AppViewState::initial()
   let connected = handle_set_connection_status(state, true)
   assert_eq(connected.is_connected, true)
-
   let disconnected = handle_set_connection_status(connected, false)
   assert_eq(disconnected.is_connected, false)
 }

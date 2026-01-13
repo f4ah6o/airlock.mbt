@@ -12,6 +12,7 @@
 /// - POST /api/tickets/{id}/drafts/{msgId}/recheck - Trigger AI recheck
 /// - POST /api/tickets/{id}/drafts/{msgId}/publish - Publish draft
 
+///|
 /// HTTP Method enum
 pub(all) enum HttpMethod {
   Get
@@ -49,8 +50,8 @@ pub fn ApiError::status_code(self : ApiError) -> Int {
 pub(all) struct RequestContext {
   http_method : HttpMethod
   path : String
-  body : String        // JSON body
-  user_id : String     // Authenticated user ID
+  body : String // JSON body
+  user_id : String // Authenticated user ID
   idempotency_key : String // For POST/PUT requests
 } derive(Show, Eq)
 
@@ -60,7 +61,7 @@ pub fn RequestContext::new(
   http_method : HttpMethod,
   path : String,
   body : String,
-  user_id : String
+  user_id : String,
 ) -> RequestContext {
   { http_method, path, body, user_id, idempotency_key: "" }
 }
@@ -122,9 +123,7 @@ pub(all) struct PublishRequest {
 ///|
 /// Validate publish request
 /// Returns ApiError if validation fails
-pub fn validate_publish_request(
-  message : @shared.Message
-) -> ApiError? {
+pub fn validate_publish_request(message : @shared.Message) -> ApiError? {
   // Must be a draft
   if not(message.is_draft) {
     return Some(BadRequest("Cannot publish non-draft message"))

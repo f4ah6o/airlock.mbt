@@ -19,7 +19,7 @@ pub fn TicketStatus::to_string(self : TicketStatus) -> String {
 ///|
 /// Message visibility enum
 pub(all) enum Visibility {
-  Public   // Shown in Pane 2 (Timeline)
+  Public // Shown in Pane 2 (Timeline)
   Internal // Shown only in Pane 3 (Workspace)
 } derive(Show, Eq)
 
@@ -34,9 +34,9 @@ pub fn Visibility::to_string(self : Visibility) -> String {
 ///|
 /// Message origin enum
 pub(all) enum Origin {
-  ChatA   // From user via external chat platform
+  ChatA // From user via external chat platform
   Console // From support staff via Chat B console
-  System  // From system/bot
+  System // From system/bot
 } derive(Show, Eq)
 
 ///|
@@ -51,11 +51,11 @@ pub fn Origin::to_string(self : Origin) -> String {
 ///|
 /// Draft status state machine states
 pub(all) enum DraftStatus {
-  Pending    // Draft created, awaiting check
-  Checking   // AI check in progress
-  Checked    // AI check passed, ready to publish
-  Rejected   // AI check failed, needs revision
-  Published  // Draft has been published to Chat A
+  Pending // Draft created, awaiting check
+  Checking // AI check in progress
+  Checked // AI check passed, ready to publish
+  Rejected // AI check failed, needs revision
+  Published // Draft has been published to Chat A
 } derive(Show, Eq)
 
 ///|
@@ -101,7 +101,7 @@ pub(all) struct Attachment {
 pub fn Attachment::new(
   attachment_type : AttachmentType,
   url : String,
-  name : String
+  name : String,
 ) -> Attachment {
   { attachment_type, url, name }
 }
@@ -109,8 +109,8 @@ pub fn Attachment::new(
 ///|
 /// Chat A platform metadata
 pub(all) struct ChatAMetadata {
-  platform : String           // e.g., "slack", "discord", "direct"
-  dm_id : String              // Channel/DM ID for sending
+  platform : String // e.g., "slack", "discord", "direct"
+  dm_id : String // Channel/DM ID for sending
   last_inbound_cursor : String // Cursor for webhook recovery
 } derive(Show, Eq)
 
@@ -119,7 +119,7 @@ pub(all) struct ChatAMetadata {
 pub fn ChatAMetadata::new(
   platform : String,
   dm_id : String,
-  last_inbound_cursor : String
+  last_inbound_cursor : String,
 ) -> ChatAMetadata {
   { platform, dm_id, last_inbound_cursor }
 }
@@ -137,7 +137,7 @@ pub(all) struct AICheckResult {
 pub fn AICheckResult::new(
   passed : Bool,
   warnings : Array[String],
-  suggestions : Array[String]
+  suggestions : Array[String],
 ) -> AICheckResult {
   { passed, warnings, suggestions }
 }
@@ -165,9 +165,9 @@ pub(all) struct Ticket {
   chat_a : ChatAMetadata
 
   // Operation management data
-  assignees : Array[String]    // Assigned staff IDs
-  last_public_at : String      // Last response timestamp (for SLA)
-  lock_version : Int           // Optimistic locking version
+  assignees : Array[String] // Assigned staff IDs
+  last_public_at : String // Last response timestamp (for SLA)
+  lock_version : Int // Optimistic locking version
 
   // Timestamps
   created_at : String
@@ -179,7 +179,7 @@ pub(all) struct Ticket {
 pub fn Ticket::new(
   ticket_id : String,
   subject : String,
-  chat_a : ChatAMetadata
+  chat_a : ChatAMetadata,
 ) -> Ticket {
   {
     ticket_id,
@@ -203,7 +203,7 @@ pub(all) struct Message {
   // Content
   text : String
   attachments : Array[Attachment]
-  reply_to_message_id : String  // For threading (empty if not a reply)
+  reply_to_message_id : String // For threading (empty if not a reply)
 
   // Control flags
   visibility : Visibility
@@ -216,7 +216,7 @@ pub(all) struct Message {
 
   // Idempotency management
   idempotency_key : String
-  published_at : String  // Timestamp when published (empty if not published)
+  published_at : String // Timestamp when published (empty if not published)
 
   // Metadata
   sender_id : String
@@ -231,7 +231,7 @@ pub fn Message::new(
   text : String,
   visibility : Visibility,
   origin : Origin,
-  sender_id : String
+  sender_id : String,
 ) -> Message {
   {
     message_id,
@@ -258,7 +258,7 @@ pub fn Message::new_draft(
   ticket_id : String,
   text : String,
   sender_id : String,
-  idempotency_key : String
+  idempotency_key : String,
 ) -> Message {
   {
     message_id,
@@ -284,7 +284,7 @@ pub fn Message::new_note(
   message_id : String,
   ticket_id : String,
   text : String,
-  sender_id : String
+  sender_id : String,
 ) -> Message {
   {
     message_id,

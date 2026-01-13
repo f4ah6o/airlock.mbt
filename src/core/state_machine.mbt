@@ -10,6 +10,7 @@
 ///      ↓
 /// [Publish Action] → published
 
+///|
 /// Error types for state transitions
 pub(all) enum StateTransitionError {
   InvalidTransition(String)
@@ -22,7 +23,7 @@ pub(all) enum StateTransitionError {
 /// Check if a draft status transition is valid
 pub fn is_valid_transition(
   from : @shared.DraftStatus,
-  to : @shared.DraftStatus
+  to : @shared.DraftStatus,
 ) -> Bool {
   match (from, to) {
     // From Pending: can start checking
@@ -44,7 +45,7 @@ pub fn is_valid_transition(
 /// Attempt to transition draft status
 pub fn transition_draft_status(
   current : @shared.DraftStatus,
-  target : @shared.DraftStatus
+  target : @shared.DraftStatus,
 ) -> Result[@shared.DraftStatus, StateTransitionError] {
   if is_valid_transition(current, target) {
     Ok(target)
@@ -80,7 +81,7 @@ pub fn can_edit(status : @shared.DraftStatus) -> Bool {
 ///|
 /// Start AI check on a draft
 pub fn start_check(
-  message : @shared.Message
+  message : @shared.Message,
 ) -> Result[@shared.Message, StateTransitionError] {
   if not(message.is_draft) {
     return Err(InvalidTransition("Cannot check non-draft message"))
@@ -102,7 +103,7 @@ pub fn start_check(
 /// Complete AI check with result
 pub fn complete_check(
   message : @shared.Message,
-  result : @shared.AICheckResult
+  result : @shared.AICheckResult,
 ) -> Result[@shared.Message, StateTransitionError] {
   if message.draft_status != @shared.Checking {
     return Err(InvalidTransition("Can only complete check from checking state"))
@@ -124,7 +125,7 @@ pub fn complete_check(
 /// Publish a draft message
 pub fn publish_draft(
   message : @shared.Message,
-  published_at : String
+  published_at : String,
 ) -> Result[@shared.Message, StateTransitionError] {
   if not(message.is_draft) {
     return Err(InvalidTransition("Cannot publish non-draft message"))
@@ -147,7 +148,7 @@ pub fn publish_draft(
 ///|
 /// Reset draft for editing (after rejection or for modification)
 pub fn reset_for_edit(
-  message : @shared.Message
+  message : @shared.Message,
 ) -> Result[@shared.Message, StateTransitionError] {
   if not(message.is_draft) {
     return Err(InvalidTransition("Cannot reset non-draft message"))

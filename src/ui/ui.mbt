@@ -7,20 +7,21 @@
 /// - Public timeline (Pane 2)
 /// - Workspace with draft editor (Pane 3)
 
+///|
 /// Pane identifiers
 pub(all) enum PaneId {
-  Inbox      // Left pane - Ticket list
-  Timeline   // Center pane - Public messages
-  Workspace  // Right pane - Internal chat + draft editor
+  Inbox // Left pane - Ticket list
+  Timeline // Center pane - Public messages
+  Workspace // Right pane - Internal chat + draft editor
 } derive(Show, Eq)
 
 ///|
 /// Layout configuration
 pub(all) struct LayoutConfig {
-  inbox_width_percent : Int      // Default: 25%
-  timeline_width_percent : Int   // Default: 40%
-  workspace_width_percent : Int  // Default: 35%
-  workspace_bg_color : String    // Default: #fffbe6 (warning color)
+  inbox_width_percent : Int // Default: 25%
+  timeline_width_percent : Int // Default: 40%
+  workspace_width_percent : Int // Default: 35%
+  workspace_bg_color : String // Default: #fffbe6 (warning color)
 } derive(Show, Eq)
 
 ///|
@@ -37,19 +38,19 @@ pub fn LayoutConfig::default() -> LayoutConfig {
 ///|
 /// Draft editor mode
 pub(all) enum EditorMode {
-  Note   // Internal note only
-  Draft  // Draft for publication
+  Note // Internal note only
+  Draft // Draft for publication
 } derive(Show, Eq)
 
 ///|
 /// UI state for the application
 pub(all) struct AppUIState {
-  selected_ticket_id : String   // Currently selected ticket
-  editor_mode : EditorMode      // Current editor mode
-  draft_text : String           // Current draft content
-  is_submitting : Bool          // Whether submission is in progress
-  show_publish_modal : Bool     // Whether publish confirmation is shown
-  error_message : String        // Current error message (empty if none)
+  selected_ticket_id : String // Currently selected ticket
+  editor_mode : EditorMode // Current editor mode
+  draft_text : String // Current draft content
+  is_submitting : Bool // Whether submission is in progress
+  show_publish_modal : Bool // Whether publish confirmation is shown
+  error_message : String // Current error message (empty if none)
 } derive(Show, Eq)
 
 ///|
@@ -67,13 +68,19 @@ pub fn AppUIState::initial() -> AppUIState {
 
 ///|
 /// Select a ticket
-pub fn AppUIState::select_ticket(self : AppUIState, ticket_id : String) -> AppUIState {
+pub fn AppUIState::select_ticket(
+  self : AppUIState,
+  ticket_id : String,
+) -> AppUIState {
   { ..self, selected_ticket_id: ticket_id, error_message: "" }
 }
 
 ///|
 /// Set editor mode
-pub fn AppUIState::set_editor_mode(self : AppUIState, mode : EditorMode) -> AppUIState {
+pub fn AppUIState::set_editor_mode(
+  self : AppUIState,
+  mode : EditorMode,
+) -> AppUIState {
   { ..self, editor_mode: mode }
 }
 
@@ -109,6 +116,9 @@ pub fn AppUIState::clear_error(self : AppUIState) -> AppUIState {
 
 ///|
 /// Set submitting state
-pub fn AppUIState::set_submitting(self : AppUIState, submitting : Bool) -> AppUIState {
+pub fn AppUIState::set_submitting(
+  self : AppUIState,
+  submitting : Bool,
+) -> AppUIState {
   { ..self, is_submitting: submitting }
 }

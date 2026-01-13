@@ -11,8 +11,8 @@
 pub(all) struct AppContext {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
-  current_timestamp : () -> String  // Function to get current time
-  generate_id : () -> String        // Function to generate unique IDs
+  current_timestamp : () -> String // Function to get current time
+  generate_id : () -> String // Function to generate unique IDs
 }
 
 ///|
@@ -21,7 +21,7 @@ pub fn AppContext::new(
   ticket_repo : @core.TicketRepository,
   message_repo : @core.MessageRepository,
   current_timestamp : () -> String,
-  generate_id : () -> String
+  generate_id : () -> String,
 ) -> AppContext {
   { ticket_repo, message_repo, current_timestamp, generate_id }
 }
@@ -34,19 +34,19 @@ pub fn AppContext::new(
 /// Parsed route information
 pub(all) enum Route {
   // Ticket routes
-  ListTickets                           // GET /api/tickets
-  GetTicket(String)                     // GET /api/tickets/{id}
+  ListTickets // GET /api/tickets
+  GetTicket(String) // GET /api/tickets/{id}
 
   // Timeline routes
-  GetTimeline(String)                   // GET /api/tickets/{id}/timeline
+  GetTimeline(String) // GET /api/tickets/{id}/timeline
 
   // Workspace routes
-  GetWorkspaceItems(String)             // GET /api/tickets/{id}/items
-  CreateNote(String)                    // POST /api/tickets/{id}/notes
-  CreateDraft(String)                   // POST /api/tickets/{id}/drafts
-  UpdateDraft(String, String)           // PUT /api/tickets/{id}/drafts/{msgId}
-  RecheckDraft(String, String)          // POST /api/tickets/{id}/drafts/{msgId}/recheck
-  PublishDraft(String, String)          // POST /api/tickets/{id}/drafts/{msgId}/publish
+  GetWorkspaceItems(String) // GET /api/tickets/{id}/items
+  CreateNote(String) // POST /api/tickets/{id}/notes
+  CreateDraft(String) // POST /api/tickets/{id}/drafts
+  UpdateDraft(String, String) // PUT /api/tickets/{id}/drafts/{msgId}
+  RecheckDraft(String, String) // POST /api/tickets/{id}/drafts/{msgId}/recheck
+  PublishDraft(String, String) // POST /api/tickets/{id}/drafts/{msgId}/publish
 
   // Unknown route
   NotFound
@@ -62,9 +62,8 @@ pub fn parse_route(http_method : HttpMethod, path : String) -> Route {
   if len < 2 || parts[0] != "api" || parts[1] != "tickets" {
     return NotFound
   }
-
   match http_method {
-    Get => {
+    Get =>
       if len == 2 {
         // GET /api/tickets
         ListTickets
@@ -80,8 +79,7 @@ pub fn parse_route(http_method : HttpMethod, path : String) -> Route {
       } else {
         NotFound
       }
-    }
-    Post => {
+    Post =>
       if len == 4 && parts[3] == "notes" {
         // POST /api/tickets/{id}/notes
         CreateNote(parts[2])
@@ -97,15 +95,13 @@ pub fn parse_route(http_method : HttpMethod, path : String) -> Route {
       } else {
         NotFound
       }
-    }
-    Put => {
+    Put =>
       if len == 5 && parts[3] == "drafts" {
         // PUT /api/tickets/{id}/drafts/{msgId}
         UpdateDraft(parts[2], parts[4])
       } else {
         NotFound
       }
-    }
     Delete => NotFound
   }
 }
@@ -138,12 +134,8 @@ fn split_path(path : String) -> Array[String] {
 
 ///|
 /// Handle incoming HTTP request
-pub fn handle_request(
-  ctx : AppContext,
-  req : RequestContext
-) -> ApiResponse {
+pub fn handle_request(ctx : AppContext, req : RequestContext) -> ApiResponse {
   let route = parse_route(req.http_method, req.path)
-
   match route {
     ListTickets => handle_list_tickets(ctx, req)
     GetTicket(id) => handle_get_ticket(ctx, id)
@@ -151,9 +143,12 @@ pub fn handle_request(
     GetWorkspaceItems(id) => handle_get_workspace_items(ctx, id)
     CreateNote(id) => handle_create_note(ctx, req, id)
     CreateDraft(id) => handle_create_draft(ctx, req, id)
-    UpdateDraft(ticket_id, msg_id) => handle_update_draft(ctx, req, ticket_id, msg_id)
-    RecheckDraft(ticket_id, msg_id) => handle_recheck_draft(ctx, ticket_id, msg_id)
-    PublishDraft(ticket_id, msg_id) => handle_publish_draft(ctx, req, ticket_id, msg_id)
+    UpdateDraft(ticket_id, msg_id) =>
+      handle_update_draft(ctx, req, ticket_id, msg_id)
+    RecheckDraft(ticket_id, msg_id) =>
+      handle_recheck_draft(ctx, ticket_id, msg_id)
+    PublishDraft(ticket_id, msg_id) =>
+      handle_publish_draft(ctx, req, ticket_id, msg_id)
     NotFound => ApiResponse::error(ApiError::NotFound("Endpoint not found"))
   }
 }
@@ -164,7 +159,10 @@ pub fn handle_request(
 
 ///|
 /// GET /api/tickets - List tickets with optional status filter
-pub fn handle_list_tickets(ctx : AppContext, req : RequestContext) -> ApiResponse {
+pub fn handle_list_tickets(
+  ctx : AppContext,
+  req : RequestContext,
+) -> ApiResponse {
   // Parse query params for status filter (simplified)
   let status = if req.path.contains("status=open") {
     Some(@shared.TicketStatus::Open)
@@ -175,12 +173,10 @@ pub fn handle_list_tickets(ctx : AppContext, req : RequestContext) -> ApiRespons
   } else {
     None
   }
-
   let tickets = match status {
     Some(s) => ctx.ticket_repo.list_by_status(s)
     None => ctx.ticket_repo.list()
   }
-
   let json = tickets_to_json(tickets)
   ApiResponse::ok(json)
 }
@@ -191,7 +187,8 @@ pub fn handle_get_ticket(ctx : AppContext, ticket_id : String) -> ApiResponse {
   match ctx.ticket_repo.get(ticket_id) {
     Ok(ticket) => ApiResponse::ok(ticket_to_json(ticket))
     Err(@core.NotFound(msg)) => ApiResponse::error(ApiError::NotFound(msg))
-    Err(_) => ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
   }
 }
 
@@ -204,11 +201,12 @@ pub fn handle_get_ticket(ctx : AppContext, ticket_id : String) -> ApiResponse {
 pub fn handle_get_timeline(ctx : AppContext, ticket_id : String) -> ApiResponse {
   // Verify ticket exists
   match ctx.ticket_repo.get(ticket_id) {
-    Err(@core.NotFound(msg)) => return ApiResponse::error(ApiError::NotFound(msg))
-    Err(_) => return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
+    Err(@core.NotFound(msg)) =>
+      return ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
     Ok(_) => ()
   }
-
   let messages = ctx.message_repo.list_public_by_ticket(ticket_id)
   let json = messages_to_json(messages)
   ApiResponse::ok(json)
@@ -220,14 +218,18 @@ pub fn handle_get_timeline(ctx : AppContext, ticket_id : String) -> ApiResponse 
 
 ///|
 /// GET /api/tickets/{id}/items - Get all messages (internal + public)
-pub fn handle_get_workspace_items(ctx : AppContext, ticket_id : String) -> ApiResponse {
+pub fn handle_get_workspace_items(
+  ctx : AppContext,
+  ticket_id : String,
+) -> ApiResponse {
   // Verify ticket exists
   match ctx.ticket_repo.get(ticket_id) {
-    Err(@core.NotFound(msg)) => return ApiResponse::error(ApiError::NotFound(msg))
-    Err(_) => return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
+    Err(@core.NotFound(msg)) =>
+      return ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
     Ok(_) => ()
   }
-
   let messages = ctx.message_repo.list_workspace_by_ticket(ticket_id)
   let json = messages_to_json(messages)
   ApiResponse::ok(json)
@@ -238,12 +240,14 @@ pub fn handle_get_workspace_items(ctx : AppContext, ticket_id : String) -> ApiRe
 pub fn handle_create_note(
   ctx : AppContext,
   req : RequestContext,
-  ticket_id : String
+  ticket_id : String,
 ) -> ApiResponse {
   // Verify ticket exists
   match ctx.ticket_repo.get(ticket_id) {
-    Err(@core.NotFound(msg)) => return ApiResponse::error(ApiError::NotFound(msg))
-    Err(_) => return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
+    Err(@core.NotFound(msg)) =>
+      return ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
     Ok(_) => ()
   }
 
@@ -258,14 +262,15 @@ pub fn handle_create_note(
   let timestamp = (ctx.current_timestamp)()
   let note = @shared.Message::{
     ..@shared.Message::new_note(msg_id, ticket_id, text, req.user_id),
-    timestamp: timestamp,
+    timestamp,
   }
 
   // Save to repository
   match ctx.message_repo.create(note) {
     Ok(_) => ApiResponse::created(message_to_json(note))
     Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
-    Err(_) => ApiResponse::error(ApiError::InternalError("Failed to create note"))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to create note"))
   }
 }
 
@@ -274,24 +279,27 @@ pub fn handle_create_note(
 pub fn handle_create_draft(
   ctx : AppContext,
   req : RequestContext,
-  ticket_id : String
+  ticket_id : String,
 ) -> ApiResponse {
   // Verify ticket exists
   match ctx.ticket_repo.get(ticket_id) {
-    Err(@core.NotFound(msg)) => return ApiResponse::error(ApiError::NotFound(msg))
-    Err(_) => return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
+    Err(@core.NotFound(msg)) =>
+      return ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
     Ok(_) => ()
   }
 
   // Parse request body
   let text = extract_json_field(req.body, "text")
   let idempotency_key = extract_json_field(req.body, "idempotency_key")
-
   if text == "" {
     return ApiResponse::error(ApiError::BadRequest("Draft text is required"))
   }
   if idempotency_key == "" {
-    return ApiResponse::error(ApiError::BadRequest("Idempotency key is required"))
+    return ApiResponse::error(
+      ApiError::BadRequest("Idempotency key is required"),
+    )
   }
 
   // Check idempotency - return existing if already created
@@ -304,15 +312,22 @@ pub fn handle_create_draft(
   let msg_id = (ctx.generate_id)()
   let timestamp = (ctx.current_timestamp)()
   let draft = @shared.Message::{
-    ..@shared.Message::new_draft(msg_id, ticket_id, text, req.user_id, idempotency_key),
-    timestamp: timestamp,
+    ..@shared.Message::new_draft(
+      msg_id,
+      ticket_id,
+      text,
+      req.user_id,
+      idempotency_key,
+    ),
+    timestamp,
   }
 
   // Save to repository
   match ctx.message_repo.create(draft) {
     Ok(_) => ApiResponse::created(message_to_json(draft))
     Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
-    Err(_) => ApiResponse::error(ApiError::InternalError("Failed to create draft"))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to create draft"))
   }
 }
 
@@ -322,7 +337,7 @@ pub fn handle_update_draft(
   ctx : AppContext,
   req : RequestContext,
   ticket_id : String,
-  msg_id : String
+  msg_id : String,
 ) -> ApiResponse {
   // Get existing draft
   let draft = match ctx.message_repo.get(msg_id) {
@@ -335,20 +350,24 @@ pub fn handle_update_draft(
 
   // Verify draft belongs to ticket
   if draft.ticket_id != ticket_id {
-    return ApiResponse::error(ApiError::NotFound("Draft not found in this ticket"))
+    return ApiResponse::error(
+      ApiError::NotFound("Draft not found in this ticket"),
+    )
   }
 
   // Verify it's actually a draft
   if not(draft.is_draft) {
-    return ApiResponse::error(ApiError::BadRequest("Cannot update non-draft message"))
+    return ApiResponse::error(
+      ApiError::BadRequest("Cannot update non-draft message"),
+    )
   }
 
   // Check if draft can be edited
   if not(@core.can_edit(draft.draft_status)) {
     return ApiResponse::error(
       ApiError::BadRequest(
-        "Cannot edit draft in current state: \{draft.draft_status.to_string()}"
-      )
+        "Cannot edit draft in current state: \{draft.draft_status.to_string()}",
+      ),
     )
   }
 
@@ -361,14 +380,14 @@ pub fn handle_update_draft(
   // Update draft - reset to pending for recheck
   let updated = @shared.Message::{
     ..draft,
-    text: text,
+    text,
     draft_status: @shared.DraftStatus::Pending,
     ai_check_result: None,
   }
-
   match ctx.message_repo.update(updated) {
     Ok(_) => ApiResponse::ok(message_to_json(updated))
-    Err(_) => ApiResponse::error(ApiError::InternalError("Failed to update draft"))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to update draft"))
   }
 }
 
@@ -377,7 +396,7 @@ pub fn handle_update_draft(
 pub fn handle_recheck_draft(
   ctx : AppContext,
   ticket_id : String,
-  msg_id : String
+  msg_id : String,
 ) -> ApiResponse {
   // Get existing draft
   let draft = match ctx.message_repo.get(msg_id) {
@@ -390,21 +409,25 @@ pub fn handle_recheck_draft(
 
   // Verify draft belongs to ticket
   if draft.ticket_id != ticket_id {
-    return ApiResponse::error(ApiError::NotFound("Draft not found in this ticket"))
+    return ApiResponse::error(
+      ApiError::NotFound("Draft not found in this ticket"),
+    )
   }
 
   // Start check using state machine
   match @core.start_check(draft) {
-    Ok(checking) => {
+    Ok(checking) =>
       match ctx.message_repo.update(checking) {
         Ok(_) => ApiResponse::ok(message_to_json(checking))
-        Err(_) => ApiResponse::error(ApiError::InternalError("Failed to update draft"))
+        Err(_) =>
+          ApiResponse::error(ApiError::InternalError("Failed to update draft"))
       }
-    }
     Err(@core.InvalidTransition(msg)) =>
       ApiResponse::error(ApiError::BadRequest(msg))
     Err(_) =>
-      ApiResponse::error(ApiError::BadRequest("Cannot recheck draft in current state"))
+      ApiResponse::error(
+        ApiError::BadRequest("Cannot recheck draft in current state"),
+      )
   }
 }
 
@@ -414,7 +437,7 @@ pub fn handle_publish_draft(
   ctx : AppContext,
   req : RequestContext,
   ticket_id : String,
-  msg_id : String
+  msg_id : String,
 ) -> ApiResponse {
   // Get existing draft
   let draft = match ctx.message_repo.get(msg_id) {
@@ -427,7 +450,9 @@ pub fn handle_publish_draft(
 
   // Verify draft belongs to ticket
   if draft.ticket_id != ticket_id {
-    return ApiResponse::error(ApiError::NotFound("Draft not found in this ticket"))
+    return ApiResponse::error(
+      ApiError::NotFound("Draft not found in this ticket"),
+    )
   }
 
   // Parse idempotency key
@@ -436,9 +461,10 @@ pub fn handle_publish_draft(
   } else {
     extract_json_field(req.body, "idempotency_key")
   }
-
   if idempotency_key == "" {
-    return ApiResponse::error(ApiError::BadRequest("Idempotency key is required for publish"))
+    return ApiResponse::error(
+      ApiError::BadRequest("Idempotency key is required for publish"),
+    )
   }
 
   // Server-side validation (CRITICAL - don't trust client)
@@ -450,18 +476,22 @@ pub fn handle_publish_draft(
   // Publish using state machine
   let timestamp = (ctx.current_timestamp)()
   match @core.publish_draft(draft, timestamp) {
-    Ok(published) => {
+    Ok(published) =>
       match ctx.message_repo.update(published) {
         Ok(_) => ApiResponse::ok(message_to_json(published))
-        Err(_) => ApiResponse::error(ApiError::InternalError("Failed to publish draft"))
+        Err(_) =>
+          ApiResponse::error(ApiError::InternalError("Failed to publish draft"))
       }
-    }
     Err(@core.AlreadyPublished) =>
       ApiResponse::error(ApiError::Conflict("Draft has already been published"))
     Err(@core.NotChecked) =>
-      ApiResponse::error(ApiError::BadRequest("Draft must be checked before publishing"))
+      ApiResponse::error(
+        ApiError::BadRequest("Draft must be checked before publishing"),
+      )
     Err(_) =>
-      ApiResponse::error(ApiError::BadRequest("Cannot publish draft in current state"))
+      ApiResponse::error(
+        ApiError::BadRequest("Cannot publish draft in current state"),
+      )
   }
 }
 
@@ -479,16 +509,23 @@ pub fn ticket_to_json(ticket : @shared.Ticket) -> String {
 /// Convert tickets array to JSON
 pub fn tickets_to_json(tickets : Array[@shared.Ticket]) -> String {
   let items = tickets.map(ticket_to_json)
-  "[" + items.fold(init="", fn(acc, item) {
-    if acc == "" { item } else { acc + "," + item }
-  }) + "]"
+  "[" +
+  items.fold(init="", fn(acc, item) {
+    if acc == "" {
+      item
+    } else {
+      acc + "," + item
+    }
+  }) +
+  "]"
 }
 
 ///|
 /// Convert message to JSON string
 pub fn message_to_json(msg : @shared.Message) -> String {
   let ai_check = match msg.ai_check_result {
-    Some(r) => "{\"passed\":\{r.passed.to_string()},\"warnings\":[\{array_to_json_strings(r.warnings)}]}"
+    Some(r) =>
+      "{\"passed\":\{r.passed.to_string()},\"warnings\":[\{array_to_json_strings(r.warnings)}]}"
     None => "null"
   }
   "{\"message_id\":\"\{msg.message_id}\",\"ticket_id\":\"\{msg.ticket_id}\",\"text\":\"\{escape_json_string(msg.text)}\",\"visibility\":\"\{msg.visibility.to_string()}\",\"origin\":\"\{msg.origin.to_string()}\",\"is_draft\":\{msg.is_draft.to_string()},\"draft_status\":\"\{msg.draft_status.to_string()}\",\"ai_check_result\":\{ai_check},\"sender_id\":\"\{msg.sender_id}\",\"timestamp\":\"\{msg.timestamp}\",\"published_at\":\"\{msg.published_at}\"}"
@@ -498,18 +535,29 @@ pub fn message_to_json(msg : @shared.Message) -> String {
 /// Convert messages array to JSON
 pub fn messages_to_json(messages : Array[@shared.Message]) -> String {
   let items = messages.map(message_to_json)
-  "[" + items.fold(init="", fn(acc, item) {
-    if acc == "" { item } else { acc + "," + item }
-  }) + "]"
+  "[" +
+  items.fold(init="", fn(acc, item) {
+    if acc == "" {
+      item
+    } else {
+      acc + "," + item
+    }
+  }) +
+  "]"
 }
 
 ///|
 /// Convert string array to JSON array of strings
 fn array_to_json_strings(arr : Array[String]) -> String {
-  arr.map(fn(s) { "\"\{escape_json_string(s)}\"" }).fold(
-    init="",
-    fn(acc, item) { if acc == "" { item } else { acc + "," + item } },
-  )
+  arr
+  .map(fn(s) { "\"\{escape_json_string(s)}\"" })
+  .fold(init="", fn(acc, item) {
+    if acc == "" {
+      item
+    } else {
+      acc + "," + item
+    }
+  })
 }
 
 ///|
@@ -538,7 +586,6 @@ fn extract_json_field(json : String, field : String) -> String {
   if start_idx < 0 {
     return ""
   }
-
   let value_start = start_idx + key.length()
 
   // Skip whitespace
@@ -546,7 +593,6 @@ fn extract_json_field(json : String, field : String) -> String {
   while i < json.length() && (json[i] == ' ' || json[i] == '\t') {
     i = i + 1
   }
-
   if i >= json.length() {
     return ""
   }
@@ -574,7 +620,6 @@ fn extract_json_field(json : String, field : String) -> String {
     }
     return result
   }
-
   ""
 }
 
@@ -587,7 +632,6 @@ fn find_substring(haystack : String, needle : String) -> Int {
   if needle.length() > haystack.length() {
     return -1
   }
-
   for i = 0; i <= haystack.length() - needle.length(); i = i + 1 {
     let mut matches = true
     for j = 0; j < needle.length(); j = j + 1 {
