@@ -8,6 +8,8 @@ import(
 )
 
 // Values
+pub fn new_stores_from_view_state(@ui.AppViewState) -> (@core.ChatStore, @core.ChatStore)
+
 pub fn new_timeline_store(Array[@ui.TimelineMessage]) -> @core.ChatStore
 
 pub fn new_workspace_store(Array[@ui.WorkspaceItem]) -> @core.ChatStore
@@ -18,13 +20,19 @@ pub fn set_workspace_messages(@core.ChatStore, Array[@ui.WorkspaceItem]) -> Unit
 
 pub fn sync_connection(@core.ChatStore, Bool) -> Unit
 
+pub fn sync_from_view_state(@core.ChatStore, @core.ChatStore, @ui.AppViewState) -> Unit
+
 pub fn timeline_message_to_moonchat(@ui.TimelineMessage) -> @core.Message
 
 pub fn timeline_view(@core.ChatStore, self_id? : String) -> @element.DomNode
 
+pub fn timeline_view_from_state(@core.ChatStore, @ui.AppViewState, self_id? : String) -> @element.DomNode
+
 pub fn workspace_item_to_moonchat(@ui.WorkspaceItem) -> @core.Message
 
 pub fn workspace_view(@core.ChatStore, (String) -> Unit, self_id? : String, placeholder? : String, disabled? : Bool) -> @element.DomNode
+
+pub fn workspace_view_from_state(@core.ChatStore, @ui.AppViewState, (String) -> Unit, self_id? : String) -> @element.DomNode
 
 // Errors
 

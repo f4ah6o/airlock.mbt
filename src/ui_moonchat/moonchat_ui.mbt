@@ -184,6 +184,62 @@ pub fn sync_connection(store : @moonchat.ChatStore, connected : Bool) -> Unit {
 }
 
 ///|
+fn workspace_placeholder(state : @ui.AppViewState) -> String {
+  match state.workspace.editor_mode {
+    @ui.EditorMode::Note => "Write an internal note..."
+    @ui.EditorMode::Draft => "Write a draft response..."
+  }
+}
+
+///|
+pub fn new_stores_from_view_state(
+  state : @ui.AppViewState,
+) -> (@moonchat.ChatStore, @moonchat.ChatStore) {
+  let timeline_store = new_timeline_store(state.timeline.messages)
+  let workspace_store = new_workspace_store(state.workspace.items)
+  sync_connection(timeline_store, state.is_connected)
+  sync_connection(workspace_store, state.is_connected)
+  (timeline_store, workspace_store)
+}
+
+///|
+pub fn sync_from_view_state(
+  timeline_store : @moonchat.ChatStore,
+  workspace_store : @moonchat.ChatStore,
+  state : @ui.AppViewState,
+) -> Unit {
+  set_timeline_messages(timeline_store, state.timeline.messages)
+  set_workspace_messages(workspace_store, state.workspace.items)
+  sync_connection(timeline_store, state.is_connected)
+  sync_connection(workspace_store, state.is_connected)
+}
+
+///|
+pub fn timeline_view_from_state(
+  store : @moonchat.ChatStore,
+  state : @ui.AppViewState,
+  self_id? : String,
+) -> @moonchat.DomNode {
+  set_timeline_messages(store, state.timeline.messages)
+  sync_connection(store, state.is_connected)
+  timeline_view(store, self_id?)
+}
+
+///|
+pub fn workspace_view_from_state(
+  store : @moonchat.ChatStore,
+  state : @ui.AppViewState,
+  on_send : (String) -> Unit,
+  self_id? : String,
+) -> @moonchat.DomNode {
+  set_workspace_messages(store, state.workspace.items)
+  sync_connection(store, state.is_connected)
+  let placeholder = workspace_placeholder(state)
+  let disabled = state.workspace.is_submitting
+  workspace_view(store, on_send, self_id?, placeholder~, disabled~)
+}
+
+///|
 pub fn timeline_view(
   store : @moonchat.ChatStore,
   self_id? : String,
