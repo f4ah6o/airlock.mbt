@@ -8,7 +8,7 @@
 https://github.com/mizchi/luna.mbt
 
 ### Chat UI
-https://github.com/OvidijusParsiunas/deep-chat
+https://github.com/f4ah6o/moonchat.mbt
 
 ### Adapter/Bot SDK
 

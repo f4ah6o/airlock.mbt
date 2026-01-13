@@ -1,0 +1,16 @@
+{
+  "import": [
+    {
+      "path": "airlock/airlock/src/ui",
+      "alias": "ui"
+    },
+    {
+      "path": "f4ah6o/moonchat",
+      "alias": "moonchat"
+    },
+    {
+      "path": "mizchi/luna/luna/static_dom/element",
+      "alias": "element"
+    }
+  ]
+}
