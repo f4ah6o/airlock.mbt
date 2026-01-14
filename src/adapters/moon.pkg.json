@@ -21,5 +21,19 @@
       "path": "moonbitlang/async",
       "alias": "async"
     }
-  ]
+  ],
+  "targets": {
+    "adapter.mbt": [
+      "native"
+    ],
+    "direct_adapter.mbt": [
+      "native"
+    ],
+    "direct_adapter_test.mbt": [
+      "native"
+    ],
+    "pkg.generated.mbti": [
+      "native"
+    ]
+  }
 }
