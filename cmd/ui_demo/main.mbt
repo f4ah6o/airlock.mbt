@@ -84,6 +84,11 @@ fn add_message(
 }
 
 ///|
+fn reviewed_public_reply(body : String) -> String {
+  "Thanks for the details. " + body + " We'll share the next update soon."
+}
+
+///|
 fn schedule_outbound_status(
   store : @moonchat.ChatStore,
   win : @js_dom.Window,
@@ -194,6 +199,7 @@ fn build_demo_view(
   state : @ui.AppViewState,
   on_send : (String) -> Unit,
   on_simulate : () -> Unit,
+  on_publish : () -> Unit,
   self_id : String,
 ) -> @element.DomNode {
   div(class="airlock-demo", [
@@ -219,6 +225,13 @@ fn build_demo_view(
           on_send,
           self_id~,
         ),
+        div(class="airlock-demo__controls", [
+          button(
+            class="btn-primary",
+            on=events().click(fn(_) { on_publish() }),
+            [text("Publish reviewed reply")],
+          ),
+        ]),
       ]),
     ]),
   ])
@@ -244,11 +257,13 @@ fn main {
   let id_counter : Ref[Int] = { val: 100 }
   let ts_counter : Ref[Int64] = { val: 1710000020000L }
   let sim_index : Ref[Int] = { val: 0 }
+  let latest_draft : Ref[String?] = { val: None }
   let win = @js_dom.window()
   fn handle_send(body : String) -> Unit {
     if body == "" {
       return
     }
+    latest_draft.val = Some(body)
     let id = add_message(
       workspace_store,
       id_counter,
@@ -259,16 +274,6 @@ fn main {
       status=@moonchat.MessageStatus::Sending,
     )
     schedule_outbound_status(workspace_store, win, id)
-    let _ = add_message(
-      timeline_store,
-      id_counter,
-      ts_counter,
-      "pub",
-      self_user,
-      @moonchat.MessageContent::Text(body),
-      status=@moonchat.MessageStatus::Delivered,
-    )
-
   }
 
   let simulated_messages : Array[String] = [
@@ -290,10 +295,31 @@ fn main {
 
   }
 
+  fn handle_publish() -> Unit {
+    match latest_draft.val {
+      Some(draft) => {
+        latest_draft.val = None
+        let reviewed = reviewed_public_reply(draft)
+        let _ = add_message(
+          timeline_store,
+          id_counter,
+          ts_counter,
+          "pub",
+          self_user,
+          @moonchat.MessageContent::Text(reviewed),
+          status=@moonchat.MessageStatus::Delivered,
+        )
+
+      }
+      None => ()
+    }
+  }
+
   inject_styles(@ui.generate_stylesheet() + "\n" + demo_styles())
   let root = ensure_root("app")
   let view = build_demo_view(
-    timeline_store, workspace_store, state, handle_send, handle_simulate, self_id,
+    timeline_store, workspace_store, state, handle_send, handle_simulate, handle_publish,
+    self_id,
   )
   @element.render(root, view)
 }
