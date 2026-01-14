@@ -136,15 +136,16 @@ fn sql_literal(value : String) -> String {
 
 ///|
 fn escape_sql_string(value : String) -> String {
-  let mut result = ""
+  let sb = StringBuilder::new(size_hint=value.length())
   for c in value {
     if c == '\'' {
-      result = result + "''"
+      sb.write_char('\'')
+      sb.write_char('\'')
     } else {
-      result = result + c.to_string()
+      sb.write_char(c)
     }
   }
-  result
+  sb.to_string()
 }
 
 ///|

@@ -124,19 +124,18 @@ fn schedule_outbound_status(
 
 ///|
 fn escape_json_string(s : String) -> String {
-  let mut result = ""
-  for i = 0; i < s.length(); i = i + 1 {
-    let c = s[i]
+  let sb = StringBuilder::new(size_hint=s.length())
+  for c in s {
     match c {
-      '"' => result = result + "\\\""
-      '\\' => result = result + "\\\\"
-      '\n' => result = result + "\\n"
-      '\r' => result = result + "\\r"
-      '\t' => result = result + "\\t"
-      _ => result = result + c.to_string()
+      '"' => sb.write_string("\\\"")
+      '\\' => sb.write_string("\\\\")
+      '\n' => sb.write_string("\\n")
+      '\r' => sb.write_string("\\r")
+      '\t' => sb.write_string("\\t")
+      _ => sb.write_char(c)
     }
   }
-  result
+  sb.to_string()
 }
 
 ///|
