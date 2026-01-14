@@ -1,5 +1,5 @@
 ///|
-using @element {div, h2, p, text}
+using @element {button, div, events, h2, p, text}
 
 ///|
 fn demo_styles() -> String {
@@ -13,8 +13,11 @@ fn demo_styles() -> String {
     "  gap: 4px;", "  margin-bottom: 12px;", "}", ".airlock-demo__title {", "  margin: 0;",
     "  font-size: 18px;", "  letter-spacing: 0.02em;", "}", ".airlock-demo__subtitle {",
     "  margin: 0;", "  color: #6b7280;", "  font-size: 13px;", "}", ".airlock-demo__chat {",
-    "  flex: 1;", "  min-height: 0;", "}", "@media (max-width: 900px) {", "  .airlock-demo {",
-    "    grid-template-columns: 1fr;", "  }", "}",
+    "  flex: 1;", "  min-height: 0;", "  display: flex;", "  flex-direction: column;",
+    "  gap: 12px;", "}", ".airlock-demo__controls {", "  display: flex;", "  justify-content: flex-end;",
+    "  gap: 8px;", "}", ".airlock-demo__chat .airlock-moonchat {", "  flex: 1;",
+    "  height: auto;", "}", "@media (max-width: 900px) {", "  .airlock-demo {", "    grid-template-columns: 1fr;",
+    "  }", "}",
   ]
   lines.join("\n")
 }
@@ -52,15 +55,32 @@ fn ensure_root(id : String) -> @element.DomElement {
 }
 
 ///|
-fn next_message_id(counter : Ref[Int]) -> String {
+fn next_message_id(counter : Ref[Int], prefix : String) -> String {
   counter.val = counter.val + 1
-  "draft-" + counter.val.to_string()
+  prefix + "-" + counter.val.to_string()
 }
 
 ///|
 fn next_timestamp(counter : Ref[Int64]) -> Int64 {
   counter.val = counter.val + 6500L
   counter.val
+}
+
+///|
+fn add_message(
+  store : @moonchat.ChatStore,
+  id_counter : Ref[Int],
+  ts_counter : Ref[Int64],
+  prefix : String,
+  sender : @moonchat.User,
+  content : @moonchat.MessageContent,
+  status? : @moonchat.MessageStatus = @moonchat.MessageStatus::Sending,
+) -> String {
+  let id = next_message_id(id_counter, prefix)
+  let timestamp = next_timestamp(ts_counter)
+  let msg = @moonchat.new_message(id, sender, content, timestamp, status~)
+  store.add_message(msg)
+  id
 }
 
 ///|
@@ -173,6 +193,7 @@ fn build_demo_view(
   workspace_store : @moonchat.ChatStore,
   state : @ui.AppViewState,
   on_send : (String) -> Unit,
+  on_simulate : () -> Unit,
   self_id : String,
 ) -> @element.DomNode {
   div(class="airlock-demo", [
@@ -180,6 +201,13 @@ fn build_demo_view(
       demo_header("Timeline", "Chat A / public"),
       div(class="airlock-demo__chat", [
         @moonchat_ui.timeline_view_from_state(timeline_store, state, self_id~),
+        div(class="airlock-demo__controls", [
+          button(
+            class="btn-secondary",
+            on=events().click(fn(_) { on_simulate() }),
+            [text("Simulate public message")],
+          ),
+        ]),
       ]),
     ]),
     div(class="airlock-demo__pane", [
@@ -208,30 +236,64 @@ fn main {
     name: self_id,
     avatar_url: None,
   }
+  let customer_user = @moonchat.User::{
+    id: "Customer",
+    name: "Customer",
+    avatar_url: None,
+  }
   let id_counter : Ref[Int] = { val: 100 }
   let ts_counter : Ref[Int64] = { val: 1710000020000L }
+  let sim_index : Ref[Int] = { val: 0 }
   let win = @js_dom.window()
   fn handle_send(body : String) -> Unit {
     if body == "" {
       return
     }
-    let id = next_message_id(id_counter)
-    let timestamp = next_timestamp(ts_counter)
-    let msg = @moonchat.new_message(
-      id,
+    let id = add_message(
+      workspace_store,
+      id_counter,
+      ts_counter,
+      "draft",
       self_user,
       @moonchat.MessageContent::Text(body),
-      timestamp,
       status=@moonchat.MessageStatus::Sending,
     )
-    workspace_store.add_message(msg)
     schedule_outbound_status(workspace_store, win, id)
+    let _ = add_message(
+      timeline_store,
+      id_counter,
+      ts_counter,
+      "pub",
+      self_user,
+      @moonchat.MessageContent::Text(body),
+      status=@moonchat.MessageStatus::Delivered,
+    )
+
+  }
+
+  let simulated_messages : Array[String] = [
+    "Could you share the ETA?", "The issue seems intermittent.", "Thanks! We are standing by.",
+  ]
+  fn handle_simulate() -> Unit {
+    let idx = sim_index.val % simulated_messages.length()
+    sim_index.val = sim_index.val + 1
+    let body = simulated_messages[idx]
+    let _ = add_message(
+      timeline_store,
+      id_counter,
+      ts_counter,
+      "pub",
+      customer_user,
+      @moonchat.MessageContent::Text(body),
+      status=@moonchat.MessageStatus::Delivered,
+    )
+
   }
 
   inject_styles(@ui.generate_stylesheet() + "\n" + demo_styles())
   let root = ensure_root("app")
   let view = build_demo_view(
-    timeline_store, workspace_store, state, handle_send, self_id,
+    timeline_store, workspace_store, state, handle_send, handle_simulate, self_id,
   )
   @element.render(root, view)
 }
