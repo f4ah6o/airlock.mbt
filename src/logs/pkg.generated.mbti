@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/src/logs"
+
+import(
+  "airlock/airlock/src/shared"
+  "f4ah6o/duckdb"
+)
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct LogStore {
+  conn : @duckdb.Connection
+}
+pub fn LogStore::append_entry(Self, @shared.LogEntry, on_complete? : (Result[Unit, LogStoreError]) -> Unit) -> Unit
+pub fn LogStore::close(Self, on_complete? : (Result[Unit, LogStoreError]) -> Unit) -> Unit
+pub fn LogStore::list_recent(Self, on_done~ : (Result[Array[@shared.LogEntry], LogStoreError]) -> Unit, limit? : Int) -> Unit
+pub fn LogStore::open(on_ready~ : (Result[Self, LogStoreError]) -> Unit, path? : String, backend? : @duckdb.JsBackend) -> Unit
+
+pub(all) enum LogStoreError {
+  DuckDB(String)
+}
+pub impl Eq for LogStoreError
+pub impl Show for LogStoreError
+
+// Type aliases
+
+// Traits
+

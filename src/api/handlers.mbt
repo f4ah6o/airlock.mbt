@@ -13,6 +13,7 @@ pub(all) struct AppContext {
   message_repo : @core.MessageRepository
   current_timestamp : () -> String // Function to get current time
   generate_id : () -> String // Function to generate unique IDs
+  log_store : @logs.LogStore?
 }
 
 ///|
@@ -22,8 +23,9 @@ pub fn AppContext::new(
   message_repo : @core.MessageRepository,
   current_timestamp : () -> String,
   generate_id : () -> String,
+  log_store? : @logs.LogStore,
 ) -> AppContext {
-  { ticket_repo, message_repo, current_timestamp, generate_id }
+  { ticket_repo, message_repo, current_timestamp, generate_id, log_store }
 }
 
 /// =============================================================================
@@ -146,11 +148,56 @@ pub fn handle_request(ctx : AppContext, req : RequestContext) -> ApiResponse {
     UpdateDraft(ticket_id, msg_id) =>
       handle_update_draft(ctx, req, ticket_id, msg_id)
     RecheckDraft(ticket_id, msg_id) =>
-      handle_recheck_draft(ctx, ticket_id, msg_id)
+      handle_recheck_draft(ctx, req, ticket_id, msg_id)
     PublishDraft(ticket_id, msg_id) =>
       handle_publish_draft(ctx, req, ticket_id, msg_id)
     NotFound => ApiResponse::error(ApiError::NotFound("Endpoint not found"))
   }
+}
+
+/// =============================================================================
+/// Log Helpers
+/// =============================================================================
+
+///|
+fn record_log(ctx : AppContext, entry : @shared.LogEntry) -> Unit {
+  match ctx.log_store {
+    Some(store) => store.append_entry(entry)
+    None => ()
+  }
+}
+
+///|
+fn message_entity_type(message : @shared.Message) -> String {
+  if message.is_draft {
+    "draft"
+  } else if message.visibility == @shared.Internal {
+    "note"
+  } else {
+    "message"
+  }
+}
+
+///|
+fn record_message_log(
+  ctx : AppContext,
+  event_type : String,
+  message : @shared.Message,
+  actor_id : String,
+  payload_json : String,
+  created_at : String,
+) -> Unit {
+  let entry : @shared.LogEntry = {
+    log_id: (ctx.generate_id)(),
+    ticket_id: message.ticket_id,
+    event_type,
+    entity_type: message_entity_type(message),
+    entity_id: message.message_id,
+    actor_id,
+    payload_json,
+    created_at,
+  }
+  record_log(ctx, entry)
 }
 
 /// =============================================================================
@@ -267,7 +314,17 @@ pub fn handle_create_note(
 
   // Save to repository
   match ctx.message_repo.create(note) {
-    Ok(_) => ApiResponse::created(message_to_json(note))
+    Ok(_) => {
+      record_message_log(
+        ctx,
+        "note_created",
+        note,
+        req.user_id,
+        message_to_json(note),
+        note.timestamp,
+      )
+      ApiResponse::created(message_to_json(note))
+    }
     Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
     Err(_) =>
       ApiResponse::error(ApiError::InternalError("Failed to create note"))
@@ -324,7 +381,17 @@ pub fn handle_create_draft(
 
   // Save to repository
   match ctx.message_repo.create(draft) {
-    Ok(_) => ApiResponse::created(message_to_json(draft))
+    Ok(_) => {
+      record_message_log(
+        ctx,
+        "draft_created",
+        draft,
+        req.user_id,
+        message_to_json(draft),
+        draft.timestamp,
+      )
+      ApiResponse::created(message_to_json(draft))
+    }
     Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
     Err(_) =>
       ApiResponse::error(ApiError::InternalError("Failed to create draft"))
@@ -385,7 +452,17 @@ pub fn handle_update_draft(
     ai_check_result: None,
   }
   match ctx.message_repo.update(updated) {
-    Ok(_) => ApiResponse::ok(message_to_json(updated))
+    Ok(_) => {
+      record_message_log(
+        ctx,
+        "draft_updated",
+        updated,
+        req.user_id,
+        message_to_json(updated),
+        (ctx.current_timestamp)(),
+      )
+      ApiResponse::ok(message_to_json(updated))
+    }
     Err(_) =>
       ApiResponse::error(ApiError::InternalError("Failed to update draft"))
   }
@@ -395,6 +472,7 @@ pub fn handle_update_draft(
 /// POST /api/tickets/{id}/drafts/{msgId}/recheck - Trigger AI recheck
 pub fn handle_recheck_draft(
   ctx : AppContext,
+  req : RequestContext,
   ticket_id : String,
   msg_id : String,
 ) -> ApiResponse {
@@ -418,7 +496,17 @@ pub fn handle_recheck_draft(
   match @core.start_check(draft) {
     Ok(checking) =>
       match ctx.message_repo.update(checking) {
-        Ok(_) => ApiResponse::ok(message_to_json(checking))
+        Ok(_) => {
+          record_message_log(
+            ctx,
+            "draft_recheck_requested",
+            checking,
+            req.user_id,
+            message_to_json(checking),
+            (ctx.current_timestamp)(),
+          )
+          ApiResponse::ok(message_to_json(checking))
+        }
         Err(_) =>
           ApiResponse::error(ApiError::InternalError("Failed to update draft"))
       }
@@ -478,7 +566,17 @@ pub fn handle_publish_draft(
   match @core.publish_draft(draft, timestamp) {
     Ok(published) =>
       match ctx.message_repo.update(published) {
-        Ok(_) => ApiResponse::ok(message_to_json(published))
+        Ok(_) => {
+          record_message_log(
+            ctx,
+            "draft_published",
+            published,
+            req.user_id,
+            message_to_json(published),
+            timestamp,
+          )
+          ApiResponse::ok(message_to_json(published))
+        }
         Err(_) =>
           ApiResponse::error(ApiError::InternalError("Failed to publish draft"))
       }

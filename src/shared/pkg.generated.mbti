@@ -1,0 +1,150 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/src/shared"
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct AICheckResult {
+  passed : Bool
+  warnings : Array[String]
+  suggestions : Array[String]
+}
+pub fn AICheckResult::fail(Array[String]) -> Self
+pub fn AICheckResult::new(Bool, Array[String], Array[String]) -> Self
+pub fn AICheckResult::pass() -> Self
+pub impl Eq for AICheckResult
+pub impl Show for AICheckResult
+
+pub(all) struct Attachment {
+  attachment_type : AttachmentType
+  url : String
+  name : String
+}
+pub fn Attachment::new(AttachmentType, String, String) -> Self
+pub impl Eq for Attachment
+pub impl Show for Attachment
+
+pub(all) enum AttachmentType {
+  Image
+  File
+  Video
+  Audio
+}
+pub fn AttachmentType::to_string(Self) -> String
+pub impl Eq for AttachmentType
+pub impl Show for AttachmentType
+
+pub(all) struct ChatAMetadata {
+  platform : String
+  dm_id : String
+  last_inbound_cursor : String
+}
+pub fn ChatAMetadata::new(String, String, String) -> Self
+pub impl Eq for ChatAMetadata
+pub impl Show for ChatAMetadata
+
+pub(all) enum DraftStatus {
+  Pending
+  Checking
+  Checked
+  Rejected
+  Published
+}
+pub fn DraftStatus::to_string(Self) -> String
+pub impl Eq for DraftStatus
+pub impl Show for DraftStatus
+
+pub(all) struct LogEntry {
+  log_id : String
+  ticket_id : String
+  event_type : String
+  entity_type : String
+  entity_id : String
+  actor_id : String
+  payload_json : String
+  created_at : String
+}
+pub fn LogEntry::new(String, String, String, String, String, String, String, String) -> Self
+pub impl Eq for LogEntry
+pub impl Show for LogEntry
+
+pub(all) struct Message {
+  message_id : String
+  ticket_id : String
+  text : String
+  attachments : Array[Attachment]
+  reply_to_message_id : String
+  visibility : Visibility
+  origin : Origin
+  is_draft : Bool
+  draft_status : DraftStatus
+  ai_check_result : AICheckResult?
+  idempotency_key : String
+  published_at : String
+  sender_id : String
+  timestamp : String
+}
+pub fn Message::new(String, String, String, Visibility, Origin, String) -> Self
+pub fn Message::new_draft(String, String, String, String, String) -> Self
+pub fn Message::new_note(String, String, String, String) -> Self
+pub impl Eq for Message
+pub impl Show for Message
+
+pub(all) enum Origin {
+  ChatA
+  Console
+  System
+}
+pub fn Origin::to_string(Self) -> String
+pub impl Eq for Origin
+pub impl Show for Origin
+
+pub(all) struct Ticket {
+  ticket_id : String
+  status : TicketStatus
+  subject : String
+  chat_a : ChatAMetadata
+  assignees : Array[String]
+  last_public_at : String
+  lock_version : Int
+  created_at : String
+  updated_at : String
+}
+pub fn Ticket::new(String, String, ChatAMetadata) -> Self
+pub impl Eq for Ticket
+pub impl Show for Ticket
+
+pub(all) enum TicketStatus {
+  Open
+  Closed
+  Pending
+}
+pub fn TicketStatus::to_string(Self) -> String
+pub impl Eq for TicketStatus
+pub impl Show for TicketStatus
+
+pub(all) struct User {
+  user_id : String
+  name : String
+  email : String
+  is_admin : Bool
+}
+pub fn User::new(String, String, String) -> Self
+pub fn User::new_admin(String, String, String) -> Self
+pub impl Eq for User
+pub impl Show for User
+
+pub(all) enum Visibility {
+  Public
+  Internal
+}
+pub fn Visibility::to_string(Self) -> String
+pub impl Eq for Visibility
+pub impl Show for Visibility
+
+// Type aliases
+
+// Traits
+

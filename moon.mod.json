@@ -6,7 +6,8 @@
     "f4ah6o/moonchat": "0.1.0",
     "mizchi/js": "0.10.7",
     "mizchi/luna": "0.4.1",
-    "moonbitlang/async": "0.15.0"
+    "moonbitlang/async": "0.15.0",
+    "f4ah6o/duckdb": "0.1.0"
   },
   "readme": "README.mbt.md",
   "repository": "",

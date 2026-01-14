@@ -6,15 +6,21 @@ fn demo_styles() -> String {
   let lines : Array[String] = [
     "html, body {", "  margin: 0;", "  padding: 0;", "  height: 100%;", "  font-family: \"Space Grotesk\", \"Noto Sans JP\", \"Segoe UI\", sans-serif;",
     "}", "#app {", "  height: 100%;", "}", ".airlock-demo {", "  display: grid;",
-    "  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", "  gap: 18px;", "  height: 100%;",
-    "  padding: 20px;", "  box-sizing: border-box;", "  background: radial-gradient(circle at top, #ffffff 0%, #fdf4e7 45%, #f8f9fb 100%);",
+    "  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.9fr);",
+    "  gap: 18px;", "  height: 100%;", "  padding: 20px;", "  box-sizing: border-box;",
+    "  background: radial-gradient(circle at top, #ffffff 0%, #fdf4e7 45%, #f8f9fb 100%);",
     "}", ".airlock-demo__pane {", "  display: flex;", "  flex-direction: column;",
     "  min-height: 0;", "}", ".airlock-demo__header {", "  display: flex;", "  flex-direction: column;",
     "  gap: 4px;", "  margin-bottom: 12px;", "}", ".airlock-demo__title {", "  margin: 0;",
     "  font-size: 18px;", "  letter-spacing: 0.02em;", "}", ".airlock-demo__subtitle {",
     "  margin: 0;", "  color: #6b7280;", "  font-size: 13px;", "}", ".airlock-demo__chat {",
     "  flex: 1;", "  min-height: 0;", "  display: flex;", "  flex-direction: column;",
-    "  gap: 12px;", "}", ".airlock-demo__controls {", "  display: flex;", "  justify-content: flex-end;",
+    "  gap: 12px;", "}", ".airlock-demo__log {", "  flex: 1;", "  min-height: 0;",
+    "  border-radius: 12px;", "  border: 1px solid rgba(15, 23, 42, 0.12);", "  background: #ffffff;",
+    "  padding: 12px;", "  overflow: auto;", "}", ".airlock-demo__log-content {",
+    "  font-family: \"JetBrains Mono\", ui-monospace, monospace;", "  font-size: 12px;",
+    "  line-height: 1.6;", "  color: #111827;", "  white-space: pre-wrap;", "}",
+    ".airlock-demo__controls {", "  display: flex;", "  justify-content: flex-end;",
     "  gap: 8px;", "}", ".airlock-demo__chat .airlock-moonchat {", "  flex: 1;",
     "  height: auto;", "}", "@media (max-width: 900px) {", "  .airlock-demo {", "    grid-template-columns: 1fr;",
     "  }", "}",
@@ -67,6 +73,12 @@ fn next_timestamp(counter : Ref[Int64]) -> Int64 {
 }
 
 ///|
+struct DemoMessageMeta {
+  id : String
+  timestamp_ms : Int64
+}
+
+///|
 fn add_message(
   store : @moonchat.ChatStore,
   id_counter : Ref[Int],
@@ -75,12 +87,12 @@ fn add_message(
   sender : @moonchat.User,
   content : @moonchat.MessageContent,
   status? : @moonchat.MessageStatus = @moonchat.MessageStatus::Sending,
-) -> String {
+) -> DemoMessageMeta {
   let id = next_message_id(id_counter, prefix)
   let timestamp = next_timestamp(ts_counter)
   let msg = @moonchat.new_message(id, sender, content, timestamp, status~)
   store.add_message(msg)
-  id
+  { id, timestamp_ms: timestamp }
 }
 
 ///|
@@ -108,6 +120,66 @@ fn schedule_outbound_status(
     900,
   )
 
+}
+
+///|
+fn escape_json_string(s : String) -> String {
+  let mut result = ""
+  for i = 0; i < s.length(); i = i + 1 {
+    let c = s[i]
+    match c {
+      '"' => result = result + "\\\""
+      '\\' => result = result + "\\\\"
+      '\n' => result = result + "\\n"
+      '\r' => result = result + "\\r"
+      '\t' => result = result + "\\t"
+      _ => result = result + c.to_string()
+    }
+  }
+  result
+}
+
+///|
+fn log_payload(kind : String, text : String) -> String {
+  "{\"kind\":\"\{kind}\",\"text\":\"\{escape_json_string(text)}\"}"
+}
+
+///|
+fn log_payload_publish(
+  draft_id : String,
+  public_id : String,
+  text : String,
+) -> String {
+  "{\"kind\":\"publish\",\"draft_id\":\"\{draft_id}\",\"public_id\":\"\{public_id}\",\"text\":\"\{escape_json_string(text)}\"}"
+}
+
+///|
+fn format_log_entry(entry : @shared.LogEntry) -> String {
+  let actor = if entry.actor_id == "" { "system" } else { entry.actor_id }
+  let ticket = if entry.ticket_id == "" { "-" } else { entry.ticket_id }
+  "\{entry.created_at} | \{entry.event_type} | \{ticket} | \{entry.entity_id} | \{actor}"
+}
+
+///|
+fn log_panel_text(entries : Array[@shared.LogEntry]) -> String {
+  if entries.is_empty() {
+    return "No logs yet."
+  }
+  entries.map(format_log_entry).join("\n")
+}
+
+///|
+fn set_log_panel_text(text : String) -> Unit {
+  let doc = @js_dom.document()
+  match doc.getElementById("log-list") {
+    Some(node) => node.setTextContent(text)
+    None => ()
+  }
+}
+
+///|
+fn update_log_panel(entries : Array[@shared.LogEntry]) -> Unit {
+  set_log_panel_text(log_panel_text(entries))
 }
 
 ///|
@@ -200,6 +272,7 @@ fn build_demo_view(
   on_send : (String) -> Unit,
   on_simulate : () -> Unit,
   on_publish : () -> Unit,
+  on_refresh_logs : () -> Unit,
   self_id : String,
 ) -> @element.DomNode {
   div(class="airlock-demo", [
@@ -234,12 +307,31 @@ fn build_demo_view(
         ]),
       ]),
     ]),
+    div(class="airlock-demo__pane", [
+      demo_header("Audit log", "DuckDB / persisted"),
+      div(class="airlock-demo__chat", [
+        div(class="airlock-demo__log", [
+          div(id="log-list", class="airlock-demo__log-content", [
+            text("Connecting to log store..."),
+          ]),
+        ]),
+        div(class="airlock-demo__controls", [
+          button(
+            class="btn-secondary",
+            on=events().click(fn(_) { on_refresh_logs() }),
+            [text("Refresh logs")],
+          ),
+        ]),
+      ]),
+    ]),
   ])
 }
 
 ///|
 fn main {
   let self_id = "Agent Ryo"
+  let customer_id = "Customer"
+  let demo_ticket_id = "A-1042"
   let state = build_demo_state(self_id)
   let (timeline_store, workspace_store) = @moonchat_ui.new_stores_from_view_state(
     state,
@@ -250,21 +342,82 @@ fn main {
     avatar_url: None,
   }
   let customer_user = @moonchat.User::{
-    id: "Customer",
-    name: "Customer",
+    id: customer_id,
+    name: customer_id,
     avatar_url: None,
   }
   let id_counter : Ref[Int] = { val: 100 }
   let ts_counter : Ref[Int64] = { val: 1710000020000L }
   let sim_index : Ref[Int] = { val: 0 }
+  let log_counter : Ref[Int] = { val: 400 }
   let latest_draft : Ref[String?] = { val: None }
+  let latest_draft_id : Ref[String?] = { val: None }
+  let log_store_ref : Ref[@logs.LogStore?] = { val: None }
+  let pending_logs : Ref[Array[@shared.LogEntry]] = { val: [] }
   let win = @js_dom.window()
+  fn refresh_logs() -> Unit {
+    match log_store_ref.val {
+      Some(store) =>
+        store.list_recent(
+          on_done=fn(result) {
+            match result {
+              Ok(entries) => update_log_panel(entries)
+              Err(err) => set_log_panel_text("Log query failed: " + "\{err}")
+            }
+          },
+          limit=40,
+        )
+      None => ()
+    }
+  }
+
+  fn append_log_entry(entry : @shared.LogEntry) -> Unit {
+    match log_store_ref.val {
+      Some(store) =>
+        store.append_entry(entry, on_complete=fn(result) {
+          match result {
+            Ok(_) => refresh_logs()
+            Err(err) => set_log_panel_text("Log write failed: " + "\{err}")
+          }
+        })
+      None => pending_logs.val.push(entry)
+    }
+  }
+
+  fn flush_pending_logs() -> Unit {
+    match log_store_ref.val {
+      Some(store) => {
+        for entry in pending_logs.val {
+          store.append_entry(entry)
+        }
+        pending_logs.val = []
+        refresh_logs()
+      }
+      None => ()
+    }
+  }
+
+  fn open_log_store() -> Unit {
+    @logs.LogStore::open(
+      on_ready=fn(result) {
+        match result {
+          Ok(store) => {
+            log_store_ref.val = Some(store)
+            flush_pending_logs()
+          }
+          Err(err) => set_log_panel_text("Log store error: " + "\{err}")
+        }
+      },
+      path="airlock_demo_logs.duckdb",
+    )
+  }
+
   fn handle_send(body : String) -> Unit {
     if body == "" {
       return
     }
     latest_draft.val = Some(body)
-    let id = add_message(
+    let meta = add_message(
       workspace_store,
       id_counter,
       ts_counter,
@@ -273,7 +426,19 @@ fn main {
       @moonchat.MessageContent::Text(body),
       status=@moonchat.MessageStatus::Sending,
     )
-    schedule_outbound_status(workspace_store, win, id)
+    latest_draft_id.val = Some(meta.id)
+    schedule_outbound_status(workspace_store, win, meta.id)
+    let entry = @shared.LogEntry::new(
+      next_message_id(log_counter, "log"),
+      demo_ticket_id,
+      "draft_submitted",
+      "draft",
+      meta.id,
+      self_id,
+      log_payload("draft", body),
+      meta.timestamp_ms.to_string(),
+    )
+    append_log_entry(entry)
   }
 
   let simulated_messages : Array[String] = [
@@ -283,7 +448,7 @@ fn main {
     let idx = sim_index.val % simulated_messages.length()
     sim_index.val = sim_index.val + 1
     let body = simulated_messages[idx]
-    let _ = add_message(
+    let meta = add_message(
       timeline_store,
       id_counter,
       ts_counter,
@@ -292,15 +457,30 @@ fn main {
       @moonchat.MessageContent::Text(body),
       status=@moonchat.MessageStatus::Delivered,
     )
-
+    let entry = @shared.LogEntry::new(
+      next_message_id(log_counter, "log"),
+      demo_ticket_id,
+      "public_message_simulated",
+      "message",
+      meta.id,
+      customer_id,
+      log_payload("public", body),
+      meta.timestamp_ms.to_string(),
+    )
+    append_log_entry(entry)
   }
 
   fn handle_publish() -> Unit {
     match latest_draft.val {
       Some(draft) => {
         latest_draft.val = None
+        let draft_id = match latest_draft_id.val {
+          Some(id) => id
+          None => ""
+        }
+        latest_draft_id.val = None
         let reviewed = reviewed_public_reply(draft)
-        let _ = add_message(
+        let meta = add_message(
           timeline_store,
           id_counter,
           ts_counter,
@@ -309,7 +489,19 @@ fn main {
           @moonchat.MessageContent::Text(reviewed),
           status=@moonchat.MessageStatus::Delivered,
         )
-
+        let entity_id = if draft_id == "" { meta.id } else { draft_id }
+        let payload = log_payload_publish(draft_id, meta.id, reviewed)
+        let entry = @shared.LogEntry::new(
+          next_message_id(log_counter, "log"),
+          demo_ticket_id,
+          "draft_published",
+          "draft",
+          entity_id,
+          self_id,
+          payload,
+          meta.timestamp_ms.to_string(),
+        )
+        append_log_entry(entry)
       }
       None => ()
     }
@@ -319,7 +511,8 @@ fn main {
   let root = ensure_root("app")
   let view = build_demo_view(
     timeline_store, workspace_store, state, handle_send, handle_simulate, handle_publish,
-    self_id,
+    refresh_logs, self_id,
   )
   @element.render(root, view)
+  open_log_store()
 }

@@ -2,6 +2,7 @@
   "import": [
     "airlock/airlock/src/shared",
     "airlock/airlock/src/core",
-    "airlock/airlock/src/ui"
+    "airlock/airlock/src/ui",
+    "airlock/airlock/src/logs"
   ]
 }
