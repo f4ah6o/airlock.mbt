@@ -1,0 +1,33 @@
+{
+  "is-main": true,
+  "import": [
+    {
+      "path": "airlock/airlock/src/ui",
+      "alias": "ui"
+    },
+    {
+      "path": "airlock/airlock/src/ui_moonchat",
+      "alias": "moonchat_ui"
+    },
+    {
+      "path": "f4ah6o/moonchat",
+      "alias": "moonchat"
+    },
+    {
+      "path": "mizchi/luna/luna/dom/element",
+      "alias": "element"
+    },
+    {
+      "path": "mizchi/js/browser/dom",
+      "alias": "js_dom"
+    }
+  ],
+  "targets": {
+    "main.mbt": [
+      "js"
+    ],
+    "pkg.generated.mbti": [
+      "js"
+    ]
+  }
+}
