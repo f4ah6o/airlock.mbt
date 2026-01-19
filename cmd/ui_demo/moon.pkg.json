@@ -22,7 +22,7 @@
       "alias": "moonchat"
     },
     {
-      "path": "mizchi/luna/luna/dom/element",
+      "path": "mizchi/luna/dom/element",
       "alias": "element"
     },
     {

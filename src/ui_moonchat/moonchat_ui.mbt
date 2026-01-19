@@ -1,5 +1,5 @@
 ///|
-using @element {div}
+using @element {div, text}
 
 ///|
 fn parse_timestamp_ms(timestamp : String) -> Int64 {
@@ -145,6 +145,28 @@ fn workspace_items_to_moonchat(
 }
 
 ///|
+pub fn set_timeline_messages(
+  store : @moonchat.ChatStore,
+  messages : Array[@ui.TimelineMessage],
+) -> Unit {
+  let moonchat_messages = timeline_messages_to_moonchat(messages)
+  for msg in moonchat_messages {
+    store.add_message(msg)
+  }
+}
+
+///|
+pub fn set_workspace_messages(
+  store : @moonchat.ChatStore,
+  items : Array[@ui.WorkspaceItem],
+) -> Unit {
+  let moonchat_messages = workspace_items_to_moonchat(items)
+  for msg in moonchat_messages {
+    store.add_message(msg)
+  }
+}
+
+///|
 pub fn new_timeline_store(
   messages : Array[@ui.TimelineMessage],
 ) -> @moonchat.ChatStore {
@@ -160,22 +182,6 @@ pub fn new_workspace_store(
   let store = @moonchat.new_store()
   set_workspace_messages(store, items)
   store
-}
-
-///|
-pub fn set_timeline_messages(
-  store : @moonchat.ChatStore,
-  messages : Array[@ui.TimelineMessage],
-) -> Unit {
-  store.set_messages(timeline_messages_to_moonchat(messages))
-}
-
-///|
-pub fn set_workspace_messages(
-  store : @moonchat.ChatStore,
-  items : Array[@ui.WorkspaceItem],
-) -> Unit {
-  store.set_messages(workspace_items_to_moonchat(items))
 }
 
 ///|
@@ -215,14 +221,58 @@ pub fn sync_from_view_state(
 }
 
 ///|
+fn format_message_content(content : @moonchat.MessageContent) -> String {
+  match content {
+    @moonchat.MessageContent::Text(t) => t
+    @moonchat.MessageContent::Markdown(m) => m
+    @moonchat.MessageContent::Image(url=url, caption=caption) => {
+      let caption_text = match caption {
+        Some(c) => " (" + c + ")"
+        None => ""
+      }
+      "[Image: " + url + caption_text + "]"
+    }
+    @moonchat.MessageContent::System(s) => "[System: " + s + "]"
+  }
+}
+
+///|
+fn message_list(store : @moonchat.ChatStore, self_id : String?) -> @element.DomNode {
+  let messages = store.get_messages()
+  let message_divs = messages.map(fn(msg) {
+    let is_self = match self_id {
+      Some(id) => msg.sender.id == id
+      None => false
+    }
+    let sender_name = if is_self { "You" } else { msg.sender.name }
+    let content_text = format_message_content(msg.content)
+    div(class="airlock-message" + (if is_self { " airlock-message--self" } else { "" }), [
+      text(sender_name + ": " + content_text)
+    ])
+  })
+  div(class="airlock-messages", message_divs)
+}
+
+///|
+fn input_area(
+  on_send : (String) -> Unit,
+  placeholder? : String,
+  disabled? : Bool,
+) -> @element.DomNode {
+  div(class="airlock-input-area", [
+    div(class="airlock-input-hint", [text("Input disabled in this demo")])
+  ])
+}
+
+///|
 pub fn timeline_view_from_state(
   store : @moonchat.ChatStore,
   state : @ui.AppViewState,
-  self_id? : String,
-) -> @moonchat.DomNode {
+  self_id : String?,
+) -> @element.DomNode {
   set_timeline_messages(store, state.timeline.messages)
   sync_connection(store, state.is_connected)
-  timeline_view(store, self_id?)
+  timeline_view(store, self_id)
 }
 
 ///|
@@ -230,22 +280,22 @@ pub fn workspace_view_from_state(
   store : @moonchat.ChatStore,
   state : @ui.AppViewState,
   on_send : (String) -> Unit,
-  self_id? : String,
-) -> @moonchat.DomNode {
+  self_id : String?,
+) -> @element.DomNode {
   set_workspace_messages(store, state.workspace.items)
   sync_connection(store, state.is_connected)
   let placeholder = workspace_placeholder(state)
   let disabled = state.workspace.is_submitting
-  workspace_view(store, on_send, self_id?, placeholder~, disabled~)
+  workspace_view(store, on_send, self_id, placeholder~, disabled~)
 }
 
 ///|
 pub fn timeline_view(
   store : @moonchat.ChatStore,
-  self_id? : String,
-) -> @moonchat.DomNode {
+  self_id : String?,
+) -> @element.DomNode {
   div(class="airlock-moonchat airlock-moonchat--timeline", [
-    @moonchat.message_list(store, self_id?),
+    message_list(store, self_id),
   ])
 }
 
@@ -253,12 +303,12 @@ pub fn timeline_view(
 pub fn workspace_view(
   store : @moonchat.ChatStore,
   on_send : (String) -> Unit,
-  self_id? : String,
+  self_id : String?,
   placeholder? : String = "Write an internal note...",
   disabled? : Bool = false,
-) -> @moonchat.DomNode {
+) -> @element.DomNode {
   div(class="airlock-moonchat airlock-moonchat--workspace", [
-    @moonchat.message_list(store, self_id?),
-    @moonchat.input_area(on_send, placeholder~, disabled~),
+    message_list(store, self_id),
+    input_area(on_send, placeholder~, disabled~),
   ])
 }

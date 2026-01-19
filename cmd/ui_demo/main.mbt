@@ -278,7 +278,7 @@ fn build_demo_view(
     div(class="airlock-demo__pane", [
       demo_header("Timeline", "Chat A / public"),
       div(class="airlock-demo__chat", [
-        @moonchat_ui.timeline_view_from_state(timeline_store, state, self_id~),
+        @moonchat_ui.timeline_view_from_state(timeline_store, state, Some(self_id)),
         div(class="airlock-demo__controls", [
           button(
             class="btn-secondary",
@@ -295,7 +295,7 @@ fn build_demo_view(
           workspace_store,
           state,
           on_send,
-          self_id~,
+          Some(self_id),
         ),
         div(class="airlock-demo__controls", [
           button(
