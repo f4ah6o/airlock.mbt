@@ -1,5 +1,5 @@
 ///|
-using @element {div, text}
+using @element {button, div, input, text}
 
 ///|
 fn parse_timestamp_ms(timestamp : String) -> Int64 {
@@ -264,8 +264,53 @@ fn input_area(
   placeholder? : String,
   disabled? : Bool,
 ) -> @element.DomNode {
+  let placeholder_text = match placeholder {
+    Some(p) => p
+    None => ""
+  }
+
+  let disabled_value = match disabled {
+    Some(d) => d
+    None => false
+  }
+
   div(class="airlock-input-area", [
-    div(class="airlock-input-hint", [text("Input disabled in this demo")]),
+    input(
+      type_="text",
+      class="airlock-input-field",
+      placeholder=placeholder_text,
+      disabled=disabled_value,
+      on=@element.events()
+        .keydown(fn(e : @js_dom.KeyboardEvent) {
+          if e.key == "Enter" {
+            let target_element = e.target()
+            let input = @js_dom.HTMLInputElement::cast_from_element(target_element)
+            if input.value != "" {
+              on_send(input.value)
+              input.value = ""
+            }
+          }
+        })
+    ),
+    button(
+      class="airlock-input-button",
+      disabled=disabled_value,
+      on=@element.events().click(fn(_) {
+        // Get input value via DOM
+        let doc = @js_dom.document()
+        match doc.querySelector(".airlock-input-field") {
+          Some(input_elem) => {
+            let input = @js_dom.HTMLInputElement::cast_from_element(input_elem)
+            if input.value != "" {
+              on_send(input.value)
+              input.value = ""
+            }
+          }
+          None => ()
+        }
+        }),
+      [text("Send")],
+    ),
   ])
 }
 
