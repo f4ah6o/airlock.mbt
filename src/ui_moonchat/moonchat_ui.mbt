@@ -225,7 +225,7 @@ fn format_message_content(content : @moonchat.MessageContent) -> String {
   match content {
     @moonchat.MessageContent::Text(t) => t
     @moonchat.MessageContent::Markdown(m) => m
-    @moonchat.MessageContent::Image(url=url, caption=caption) => {
+    @moonchat.MessageContent::Image(url~, caption~) => {
       let caption_text = match caption {
         Some(c) => " (" + c + ")"
         None => ""
@@ -237,7 +237,10 @@ fn format_message_content(content : @moonchat.MessageContent) -> String {
 }
 
 ///|
-fn message_list(store : @moonchat.ChatStore, self_id : String?) -> @element.DomNode {
+fn message_list(
+  store : @moonchat.ChatStore,
+  self_id : String?,
+) -> @element.DomNode {
   let messages = store.get_messages()
   let message_divs = messages.map(fn(msg) {
     let is_self = match self_id {
@@ -246,9 +249,11 @@ fn message_list(store : @moonchat.ChatStore, self_id : String?) -> @element.DomN
     }
     let sender_name = if is_self { "You" } else { msg.sender.name }
     let content_text = format_message_content(msg.content)
-    div(class="airlock-message" + (if is_self { " airlock-message--self" } else { "" }), [
-      text(sender_name + ": " + content_text)
-    ])
+    div(
+      class="airlock-message" +
+        (if is_self { " airlock-message--self" } else { "" }),
+      [text(sender_name + ": " + content_text)],
+    )
   })
   div(class="airlock-messages", message_divs)
 }
@@ -260,7 +265,7 @@ fn input_area(
   disabled? : Bool,
 ) -> @element.DomNode {
   div(class="airlock-input-area", [
-    div(class="airlock-input-hint", [text("Input disabled in this demo")])
+    div(class="airlock-input-hint", [text("Input disabled in this demo")]),
   ])
 }
 

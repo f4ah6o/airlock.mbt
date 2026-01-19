@@ -1,0 +1,17 @@
+import {
+  "airlock/airlock/src/shared",
+  "f4ah6o/direct_sdk/config" as @direct_config,
+  "f4ah6o/direct_sdk/errors" as @direct_errors,
+  "f4ah6o/direct_sdk/rpc/client" as @rpc_client,
+  "f4ah6o/direct_sdk/types" as @direct_types,
+  "moonbitlang/async" as @async,
+}
+
+options(
+  targets: {
+    "adapter.mbt": [ "native" ],
+    "direct_adapter.mbt": [ "native" ],
+    "direct_adapter_test.mbt": [ "native" ],
+    "pkg.generated.mbti": [ "native" ],
+  },
+)

@@ -1,0 +1,5 @@
+import { "airlock/airlock" as @lib }
+
+options(
+  "is-main": true,
+)

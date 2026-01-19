@@ -1,0 +1,14 @@
+import {
+  "airlock/airlock/src/ui" as @ui,
+  "airlock/airlock/src/ui_moonchat" as @moonchat_ui,
+  "airlock/airlock/src/logs" as @logs,
+  "airlock/airlock/src/shared" as @shared,
+  "f4ah6o/moonchat" as @moonchat,
+  "mizchi/luna/dom/element" as @element,
+  "mizchi/js/browser/dom" as @js_dom,
+}
+
+options(
+  "is-main": true,
+  targets: { "main.mbt": [ "js" ], "pkg.generated.mbti": [ "js" ] },
+)
