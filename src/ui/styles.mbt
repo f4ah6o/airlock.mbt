@@ -122,10 +122,10 @@ pub let class_ticket_selected : String = "airlock-ticket-selected"
 pub let class_message_bubble : String = "airlock-message"
 
 ///|
-pub let class_message_user : String = "airlock-message-user"
+pub let class_message_user : String = "airlock-message--self"
 
 ///|
-pub let class_message_support : String = "airlock-message-support"
+pub let class_message_support : String = "airlock-message--other"
 
 ///|
 pub let class_draft_editor : String = "airlock-draft-editor"
@@ -273,14 +273,16 @@ pub fn generate_stylesheet() -> String {
     "  box-shadow: \{shadow_light};",
     "}",
     "",
-    ".airlock-message-user {",
+    ".airlock-message--self {",
     "  background: #e3f2fd;",
     "  margin-left: auto;",
+    "  margin-right: 8px;",
     "}",
     "",
-    ".airlock-message-support {",
+    ".airlock-message--other {",
     "  background: #ffffff;",
     "  margin-right: auto;",
+    "  margin-left: 8px;",
     "}",
     "",
     "/* Draft Editor */",
@@ -391,6 +393,15 @@ pub fn generate_stylesheet() -> String {
     "",
     ".airlock-moonchat--workspace {",
     "  background: linear-gradient(160deg, #fff7e6 0%, #fffdf5 100%);",
+    "}",
+
+    ".airlock-messages {",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "  gap: 12px;",
+    "  flex: 1;",
+    "  overflow: auto;",
+    "  padding-right: 4px;",
     "}",
     "",
     ".mc-message-list {",

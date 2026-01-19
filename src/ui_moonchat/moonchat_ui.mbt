@@ -251,7 +251,7 @@ fn message_list(
     let content_text = format_message_content(msg.content)
     div(
       class="airlock-message" +
-        (if is_self { " airlock-message--self" } else { "" }),
+        (if is_self { " airlock-message--self" } else { " airlock-message--other" }),
       [text(sender_name + ": " + content_text)],
     )
   })

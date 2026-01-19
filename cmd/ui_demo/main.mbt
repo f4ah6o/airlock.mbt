@@ -312,15 +312,16 @@ fn build_demo_view(
   on_refresh_logs : () -> Unit,
   self_id : String,
 ) -> @element.DomNode {
+  let placeholder = match state.workspace.editor_mode {
+    @ui.EditorMode::Note => "Write an internal note..."
+    @ui.EditorMode::Draft => "Write a draft response..."
+  }
+  let disabled = state.workspace.is_submitting
   div(class="airlock-demo", [
     div(class="airlock-demo__pane", [
       demo_header("Timeline", "Chat A / public"),
       div(class="airlock-demo__chat", [
-        @moonchat_ui.timeline_view_from_state(
-          timeline_store,
-          state,
-          Some(self_id),
-        ),
+        @moonchat_ui.timeline_view(timeline_store, Some(self_id)),
         div(class="airlock-demo__controls", [
           button(
             class="btn-secondary",
@@ -333,11 +334,12 @@ fn build_demo_view(
     div(class="airlock-demo__pane", [
       demo_header("Workspace", "Chat B / drafts"),
       div(class="airlock-demo__chat", [
-        @moonchat_ui.workspace_view_from_state(
+        @moonchat_ui.workspace_view(
           workspace_store,
-          state,
           on_send,
           Some(self_id),
+          placeholder~,
+          disabled~,
         ),
         div(class="airlock-demo__controls", [
           button(
@@ -396,6 +398,15 @@ fn main {
   let log_store_ref : Ref[@logs.LogStore?] = { val: None }
   let pending_logs : Ref[Array[@shared.LogEntry]] = { val: [] }
   let win = @js_dom.window()
+  let root = ensure_root("app")
+  let render_view_ref : Ref[(() -> Unit)?] = { val: None }
+
+  fn render_now() -> Unit {
+    match render_view_ref.val {
+      Some(render) => render()
+      None => ()
+    }
+  }
   fn refresh_logs() -> Unit {
     match log_store_ref.val {
       Some(store) =>
@@ -480,6 +491,7 @@ fn main {
       meta.timestamp_ms.to_string(),
     )
     append_log_entry(entry)
+    render_now()
   }
 
   let simulated_messages : Array[String] = [
@@ -509,6 +521,7 @@ fn main {
       meta.timestamp_ms.to_string(),
     )
     append_log_entry(entry)
+    render_now()
   }
 
   fn handle_publish() -> Unit {
@@ -543,17 +556,20 @@ fn main {
           meta.timestamp_ms.to_string(),
         )
         append_log_entry(entry)
+        render_now()
       }
       None => ()
     }
   }
 
   inject_styles(@ui.generate_stylesheet() + "\n" + demo_styles())
-  let root = ensure_root("app")
-  let view = build_demo_view(
-    timeline_store, workspace_store, state, handle_send, handle_simulate, handle_publish,
-    refresh_logs, self_id,
-  )
-  @element.render(root, view)
+  render_view_ref.val = Some(fn() {
+    let view = build_demo_view(
+      timeline_store, workspace_store, state, handle_send, handle_simulate,
+      handle_publish, refresh_logs, self_id,
+    )
+    @element.render(root, view)
+  })
+  render_now()
   open_log_store()
 }
