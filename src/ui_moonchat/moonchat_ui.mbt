@@ -1,5 +1,5 @@
 ///|
-using @element {button, div, input, text}
+using @element {button, div, img, input, span, text}
 
 ///|
 fn parse_timestamp_ms(timestamp : String) -> Int64 {
@@ -221,18 +221,27 @@ pub fn sync_from_view_state(
 }
 
 ///|
-fn format_message_content(content : @moonchat.MessageContent) -> String {
+fn message_content_nodes(
+  content : @moonchat.MessageContent,
+) -> Array[@element.DomNode] {
   match content {
-    @moonchat.MessageContent::Text(t) => t
-    @moonchat.MessageContent::Markdown(m) => m
+    @moonchat.MessageContent::Text(t) => [text(t)]
+    @moonchat.MessageContent::Markdown(m) => [text(m)]
     @moonchat.MessageContent::Image(url~, caption~) => {
-      let caption_text = match caption {
-        Some(c) => " (" + c + ")"
-        None => ""
+      let image_node = img(
+        class="airlock-message__image",
+        src=url,
+        alt=match caption {
+          Some(c) => c
+          None => "image"
+        },
+      )
+      match caption {
+        Some(c) => [image_node, span(class="airlock-message__caption", [text(c)])]
+        None => [image_node]
       }
-      "[Image: " + url + caption_text + "]"
     }
-    @moonchat.MessageContent::System(s) => "[System: " + s + "]"
+    @moonchat.MessageContent::System(s) => [text("[System: " + s + "]")]
   }
 }
 
@@ -248,11 +257,15 @@ fn message_list(
       None => false
     }
     let sender_name = if is_self { "You" } else { msg.sender.name }
-    let content_text = format_message_content(msg.content)
+    let content_nodes = message_content_nodes(msg.content)
+    let nodes : Array[@element.DomNode] = [text(sender_name + ": ")]
+    for node in content_nodes {
+      nodes.push(node)
+    }
     div(
       class="airlock-message" +
         (if is_self { " airlock-message--self" } else { " airlock-message--other" }),
-      [text(sender_name + ": " + content_text)],
+      nodes,
     )
   })
   div(class="airlock-messages", message_divs)
