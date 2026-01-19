@@ -1,5 +1,5 @@
 import {
   "airlock/airlock/src/ui" as @ui,
   "f4ah6o/moonchat" as @moonchat,
-  "mizchi/luna/dom/element" as @element,
+  "mizchi/luna/dom" as @element,
 }
