@@ -4,3 +4,4 @@ target
 .moonagent/
 lib/
 _build/
+node_modules/
