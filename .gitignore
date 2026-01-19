@@ -5,3 +5,4 @@ target
 lib/
 _build/
 node_modules/
+dist/
