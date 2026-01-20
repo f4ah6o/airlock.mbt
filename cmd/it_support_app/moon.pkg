@@ -1,0 +1,17 @@
+import {
+  "airlock/airlock/src/core" as @core,
+  "airlock/airlock/src/shared" as @shared,
+  "airlock/airlock/src/web" as @web,
+  "f4ah6o/http11" as @http,
+  "moonbitlang/async" as @async,
+  "moonbitlang/async/socket" as @socket,
+  "moonbitlang/x/fs" as @fs,
+}
+
+options(
+  "is-main": true,
+  targets: {
+    "main_native.mbt": [ "native" ],
+    "main_stub.mbt": [ "not", "native" ],
+  },
+)
