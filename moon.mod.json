@@ -2,7 +2,7 @@
   "name": "airlock/airlock",
   "version": "0.1.0",
   "deps": {
-    "f4ah6o/direct_sdk": "0.10.0",
+    "f4ah6o/direct_sdk": "0.10.1",
     "f4ah6o/http11": { "path": "../http11.mbt" },
     "f4ah6o/tmpx": "0.1.0",
     "moonbitlang/async": "0.16.0",
@@ -14,5 +14,6 @@
   "license": "",
   "keywords": [],
   "description": "",
-  "source": "src"
+  "source": "src",
+  "preferred-target": "native"
 }

@@ -1,107 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/adapters"
 
-import(
-  "airlock/airlock/shared"
-  "f4ah6o/direct_sdk/rpc/client"
-  "f4ah6o/direct_sdk/types"
-  "moonbitlang/async"
-)
-
 // Values
-pub fn direct_message_to_normalized(AdapterConfig, @types.ReceivedMessage) -> NormalizedMessage
-
-pub fn is_self_message(AdapterConfig, String) -> Bool
-
-pub fn should_ignore_message(AdapterConfig, NormalizedMessage) -> Bool
 
 // Errors
 
 // Types and methods
-pub(all) struct AdapterConfig {
-  platform_name : String
-  bot_user_id : String
-  api_token : String
-  webhook_secret : String
-  retry_count : Int
-  retry_delay_ms : Int
-}
-pub fn AdapterConfig::new(String, String, String) -> Self
-pub impl Eq for AdapterConfig
-pub impl Show for AdapterConfig
-
-pub(all) enum AdapterError {
-  ConnectionError(String)
-  AuthenticationError(String)
-  RateLimitError(String)
-  MessageTooLong(String)
-  InvalidChannel(String)
-  UnknownError(String)
-}
-pub impl Eq for AdapterError
-pub impl Show for AdapterError
-
-pub(all) enum AdapterState {
-  Disconnected
-  Connecting
-  Connected
-  Reconnecting
-  Error(String)
-}
-pub impl Eq for AdapterState
-pub impl Show for AdapterState
-
-pub(all) struct DirectAdapter {
-  config : AdapterConfig
-  client : @client.Client
-  mut state : AdapterState
-}
-pub async fn DirectAdapter::connect(Self, @async.TaskGroup[Unit]) -> Result[Unit, AdapterError]
-pub async fn DirectAdapter::disconnect(Self) -> Result[Unit, AdapterError]
-pub fn DirectAdapter::listen_incoming(Self, (NormalizedMessage) -> Unit) -> Unit
-pub fn DirectAdapter::new(AdapterConfig, endpoint? : String, proxy_url? : String, bot_name? : String, debug? : Bool, timeout_ms? : Int) -> Self
-pub fn DirectAdapter::platform_name(Self) -> String
-pub async fn DirectAdapter::send_outbound(Self, OutboundMessage) -> Result[SendResult, AdapterError]
-pub fn DirectAdapter::state(Self) -> AdapterState
-
-pub(all) struct NormalizedMessage {
-  external_id : String
-  platform : String
-  channel_id : String
-  sender_id : String
-  sender_name : String
-  text : String
-  attachments : Array[@shared.Attachment]
-  timestamp : String
-  is_bot : Bool
-  reply_to_id : String
-  raw_data : String
-}
-pub fn NormalizedMessage::new(String, String, String, String, String, String, String) -> Self
-pub impl Eq for NormalizedMessage
-pub impl Show for NormalizedMessage
-
-pub(all) struct OutboundMessage {
-  channel_id : String
-  text : String
-  attachments : Array[@shared.Attachment]
-  reply_to_id : String
-  idempotency_key : String
-}
-pub fn OutboundMessage::new(String, String, String) -> Self
-pub impl Eq for OutboundMessage
-pub impl Show for OutboundMessage
-
-pub(all) struct SendResult {
-  success : Bool
-  external_id : String
-  error_message : String
-  timestamp : String
-}
-pub fn SendResult::failure(String) -> Self
-pub fn SendResult::success(String, String) -> Self
-pub impl Eq for SendResult
-pub impl Show for SendResult
 
 // Type aliases
 
