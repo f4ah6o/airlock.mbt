@@ -1,0 +1,14 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/cmd/it_support_app"
+
+// Values
+
+// Errors
+
+// Types and methods
+type AppState
+
+// Type aliases
+
+// Traits
+
