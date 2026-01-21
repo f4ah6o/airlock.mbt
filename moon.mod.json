@@ -13,8 +13,8 @@
     "f4ah6o/duckdb": "0.4.0"
   },
   "readme": "README.mbt.md",
-  "repository": "",
-  "license": "Apache-2.0",
+  "repository": "https://github.com/f4ah6o/airlock.mbt",
+  "license": "",
   "keywords": [],
   "description": "",
   "source": "src"
