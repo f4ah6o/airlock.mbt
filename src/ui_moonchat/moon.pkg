@@ -1,6 +1,0 @@
-import {
-  "airlock/airlock/ui" as @ui,
-  "f4ah6o/moonchat" as @moonchat,
-  "mizchi/js/browser/dom" as @js_dom,
-  "mizchi/luna/dom" as @element,
-}
