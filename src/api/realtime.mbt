@@ -297,9 +297,40 @@ pub fn stop_typing(state : RealtimeState, ticket_id : String) -> RealtimeState {
 /// =============================================================================
 
 ///|
+/// Minimal view state for native UI flows.
+pub(all) struct AppViewState {
+  selected_ticket_id : String
+  is_connected : Bool
+} derive(Show, Eq)
+
+///|
+/// Create initial view state
+pub fn AppViewState::initial() -> AppViewState {
+  { selected_ticket_id: "", is_connected: false }
+}
+
+///|
+/// Update connection status
+pub fn handle_set_connection_status(
+  state : AppViewState,
+  connected : Bool,
+) -> AppViewState {
+  { ..state, is_connected: connected }
+}
+
+///|
+/// Update selected ticket
+pub fn handle_select_ticket(
+  state : AppViewState,
+  ticket_id : String,
+) -> AppViewState {
+  { ..state, selected_ticket_id: ticket_id }
+}
+
+///|
 /// Full application state including realtime
 pub(all) struct AppState {
-  view : @ui.AppViewState
+  view : AppViewState
   realtime : RealtimeState
   current_user_id : String
 } derive(Show, Eq)
@@ -308,7 +339,7 @@ pub(all) struct AppState {
 /// Create initial application state
 pub fn AppState::initial(ws_url : String, user_id : String) -> AppState {
   {
-    view: @ui.AppViewState::initial(),
+    view: AppViewState::initial(),
     realtime: RealtimeState::new(ws_url),
     current_user_id: user_id,
   }
@@ -316,10 +347,7 @@ pub fn AppState::initial(ws_url : String, user_id : String) -> AppState {
 
 ///|
 /// Update view state
-pub fn AppState::update_view(
-  self : AppState,
-  view : @ui.AppViewState,
-) -> AppState {
+pub fn AppState::update_view(self : AppState, view : AppViewState) -> AppState {
   { ..self, view, }
 }
 
@@ -338,7 +366,7 @@ pub fn AppState::on_connection_change(
   self : AppState,
   connected : Bool,
 ) -> AppState {
-  let view = @ui.handle_set_connection_status(self.view, connected)
+  let view = handle_set_connection_status(self.view, connected)
   let realtime = if connected {
     on_connected(self.realtime)
   } else {
@@ -359,6 +387,6 @@ pub fn AppState::select_ticket(self : AppState, ticket_id : String) -> AppState 
   // Subscribe to new ticket
   let realtime2 = subscribe_to_ticket(realtime1, ticket_id)
   // Update view
-  let view = @ui.handle_select_ticket(self.view, ticket_id)
+  let view = handle_select_ticket(self.view, ticket_id)
   { ..self, view, realtime: realtime2 }
 }

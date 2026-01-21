@@ -1,7 +1,7 @@
 import {
-  "airlock/airlock/src/core" as @core,
-  "airlock/airlock/src/shared" as @shared,
-  "airlock/airlock/src/web" as @web,
+  "airlock/airlock/core" as @core,
+  "airlock/airlock/shared" as @shared,
+  "airlock/airlock/web" as @web,
   "f4ah6o/http11" as @http,
   "moonbitlang/async" as @async,
   "moonbitlang/async/socket" as @socket,
