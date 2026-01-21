@@ -5,7 +5,6 @@ import(
   "airlock/airlock/core"
   "airlock/airlock/logs"
   "airlock/airlock/shared"
-  "airlock/airlock/ui"
 )
 
 // Values
@@ -28,6 +27,10 @@ pub fn handle_publish_draft(AppContext, RequestContext, String, String) -> ApiRe
 pub fn handle_recheck_draft(AppContext, RequestContext, String, String) -> ApiResponse
 
 pub fn handle_request(AppContext, RequestContext) -> ApiResponse
+
+pub fn handle_select_ticket(AppViewState, String) -> AppViewState
+
+pub fn handle_set_connection_status(AppViewState, Bool) -> AppViewState
 
 pub fn handle_update_draft(AppContext, RequestContext, String, String) -> ApiResponse
 
@@ -99,7 +102,7 @@ pub(all) struct AppContext {
 pub fn AppContext::new(@core.TicketRepository, @core.MessageRepository, () -> String, () -> String, log_store? : @logs.LogStore) -> Self
 
 pub(all) struct AppState {
-  view : @ui.AppViewState
+  view : AppViewState
   realtime : RealtimeState
   current_user_id : String
 }
@@ -107,9 +110,17 @@ pub fn AppState::initial(String, String) -> Self
 pub fn AppState::on_connection_change(Self, Bool) -> Self
 pub fn AppState::select_ticket(Self, String) -> Self
 pub fn AppState::update_realtime(Self, RealtimeState) -> Self
-pub fn AppState::update_view(Self, @ui.AppViewState) -> Self
+pub fn AppState::update_view(Self, AppViewState) -> Self
 pub impl Eq for AppState
 pub impl Show for AppState
+
+pub(all) struct AppViewState {
+  selected_ticket_id : String
+  is_connected : Bool
+}
+pub fn AppViewState::initial() -> Self
+pub impl Eq for AppViewState
+pub impl Show for AppViewState
 
 pub(all) enum ClientEvent {
   Subscribe(String)
