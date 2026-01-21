@@ -23,44 +23,15 @@ fn demo_styles() -> String {
     ".airlock-demo__controls {", "  display: flex;", "  justify-content: flex-end;",
     "  gap: 8px;", "}", ".airlock-demo__chat .airlock-moonchat {", "  flex: 1;",
     "  height: auto;", "}", "@media (max-width: 900px) {", "  .airlock-demo {", "    grid-template-columns: 1fr;",
-    "  }", "}",
-    ".airlock-input-area {",
-    "  display: flex;",
-    "  gap: 8px;",
-    "  padding: 12px;",
-    "  background: #ffffff;",
-    "  border-radius: 8px;",
-    "  border: 1px solid rgba(15, 23, 42, 0.12);",
-    "}",
-    ".airlock-input-field {",
-    "  flex: 1;",
-    "  padding: 8px 12px;",
-    "  border: 1px solid rgba(15, 23, 42, 0.2);",
-    "  border-radius: 6px;",
-    "  font-size: 14px;",
-    "  outline: none;",
-    "}",
-    ".airlock-input-field:focus {",
-    "  border-color: #3b82f6;",
-    "}",
-    ".airlock-input-button {",
-    "  padding: 8px 16px;",
-    "  background: #3b82f6;",
-    "  color: white;",
-    "  border: none;",
-    "  border-radius: 6px;",
-    "  cursor: pointer;",
-    "  font-size: 14px;",
-    "}",
-    ".airlock-input-button:hover {",
-    "  background: #2563eb;",
-    "}",
-    ".airlock-input-button:disabled {",
-    "  background: #9ca3af;",
-    "  cursor: not-allowed;",
-    "}",
-    ".airlock-input-field:disabled {",
-    "  background: #f3f4f6;",
+    "  }", "}", ".airlock-input-area {", "  display: flex;", "  gap: 8px;", "  padding: 12px;",
+    "  background: #ffffff;", "  border-radius: 8px;", "  border: 1px solid rgba(15, 23, 42, 0.12);",
+    "}", ".airlock-input-field {", "  flex: 1;", "  padding: 8px 12px;", "  border: 1px solid rgba(15, 23, 42, 0.2);",
+    "  border-radius: 6px;", "  font-size: 14px;", "  outline: none;", "}", ".airlock-input-field:focus {",
+    "  border-color: #3b82f6;", "}", ".airlock-input-button {", "  padding: 8px 16px;",
+    "  background: #3b82f6;", "  color: white;", "  border: none;", "  border-radius: 6px;",
+    "  cursor: pointer;", "  font-size: 14px;", "}", ".airlock-input-button:hover {",
+    "  background: #2563eb;", "}", ".airlock-input-button:disabled {", "  background: #9ca3af;",
+    "  cursor: not-allowed;", "}", ".airlock-input-field:disabled {", "  background: #f3f4f6;",
     "}",
   ]
   lines.join("\n")
@@ -400,13 +371,13 @@ fn main {
   let win = @js_dom.window()
   let root = ensure_root("app")
   let render_view_ref : Ref[(() -> Unit)?] = { val: None }
-
   fn render_now() -> Unit {
     match render_view_ref.val {
       Some(render) => render()
       None => ()
     }
   }
+
   fn refresh_logs() -> Unit {
     match log_store_ref.val {
       Some(store) =>
@@ -565,8 +536,8 @@ fn main {
   inject_styles(@ui.generate_stylesheet() + "\n" + demo_styles())
   render_view_ref.val = Some(fn() {
     let view = build_demo_view(
-      timeline_store, workspace_store, state, handle_send, handle_simulate,
-      handle_publish, refresh_logs, self_id,
+      timeline_store, workspace_store, state, handle_send, handle_simulate, handle_publish,
+      refresh_logs, self_id,
     )
     @element.render(root, view)
   })

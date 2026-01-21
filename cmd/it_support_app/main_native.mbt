@@ -143,7 +143,11 @@ fn path_only(uri : String) -> String {
         sb.write_char(c)
       }
       let out = sb.to_string()
-      if out == "" { "/" } else { out }
+      if out == "" {
+        "/"
+      } else {
+        out
+      }
     }
     Some(idx) => {
       let mut j = idx + 3
@@ -188,7 +192,6 @@ fn seed_state() -> AppState {
   let ticket_repo = @core.TicketRepository::new()
   let message_repo = @core.MessageRepository::new()
   let id_counter : Ref[Int] = { val: 100 }
-
   let t1 = @shared.Ticket::new(
     "tkt-001",
     "VPN does not connect",
@@ -201,7 +204,6 @@ fn seed_state() -> AppState {
   )
   let _ = ticket_repo.create(t1)
   let _ = ticket_repo.create(t2)
-
   let m1 = @shared.Message::new(
     next_id(id_counter, "msg"),
     "tkt-001",
@@ -220,12 +222,16 @@ fn seed_state() -> AppState {
   )
   let _ = message_repo.create(m1)
   let _ = message_repo.create(m2)
-
   { ticket_repo, message_repo, id_counter }
 }
 
 ///|
-fn build_response(status : Int, reason : String, body : String, content_type : String) -> @http.Response {
+fn build_response(
+  status : Int,
+  reason : String,
+  body : String,
+  content_type : String,
+) -> @http.Response {
   let body_bytes = string_to_bytes(body)
   @http.Response::new(status, reason)
   .header("Content-Type", content_type)
@@ -262,10 +268,7 @@ fn read_asset(path : String) -> String? {
 }
 
 ///|
-fn handle_get(
-  state : AppState,
-  path : String,
-) -> @http.Response {
+fn handle_get(state : AppState, path : String) -> @http.Response {
   if path == "/" {
     let tickets = state.ticket_repo.list()
     let selected = if tickets.is_empty() { None } else { Some(tickets[0]) }
@@ -276,21 +279,18 @@ fn handle_get(
     let notes = match selected {
       None => []
       Some(t) =>
-        state
-        .message_repo
+        state.message_repo
         .list_workspace_by_ticket(t.ticket_id)
         .filter(fn(m) { m.visibility == @shared.Internal })
     }
     return html_response(@web.render_index(tickets, selected, timeline, notes))
   }
-
   if path == "/assets/htmx.js" {
     match read_asset("cmd/it_support_app/public/htmx.js") {
       Some(content) => return js_response(content)
       None => return not_found_response()
     }
   }
-
   let parts = split_path(path)
   if parts.length() == 3 && parts[0] == "partials" && parts[1] == "ticket" {
     let ticket_id = parts[2]
@@ -305,14 +305,12 @@ fn handle_get(
     let notes = match ticket {
       None => []
       Some(t) =>
-        state
-        .message_repo
+        state.message_repo
         .list_workspace_by_ticket(t.ticket_id)
         .filter(fn(m) { m.visibility == @shared.Internal })
     }
     return html_response(@web.render_ticket_partial(ticket, timeline, notes))
   }
-
   not_found_response()
 }
 
@@ -332,9 +330,10 @@ fn handle_post(
       None => ""
     }
     if text == "" {
-      return build_response(400, "Bad Request", "text is required", "text/plain; charset=utf-8")
+      return build_response(
+        400, "Bad Request", "text is required", "text/plain; charset=utf-8",
+      )
     }
-
     match action {
       "reply" => {
         let msg = @shared.Message::new(
@@ -365,8 +364,7 @@ fn handle_post(
           Ok(t) => Some(t)
           Err(_) => None
         }
-        let notes = state
-          .message_repo
+        let notes = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
         return html_response(@web.render_right_partial(ticket, notes))
@@ -374,7 +372,6 @@ fn handle_post(
       _ => ()
     }
   }
-
   not_found_response()
 }
 
@@ -387,7 +384,8 @@ fn build_response_for_request(
   match request.http_method {
     "GET" => handle_get(state, path)
     "POST" => handle_post(state, path, request.body)
-    _ => build_response(405, "Method Not Allowed", "", "text/plain; charset=utf-8")
+    _ =>
+      build_response(405, "Method Not Allowed", "", "text/plain; charset=utf-8")
   }
 }
 
@@ -395,34 +393,35 @@ fn build_response_for_request(
 async fn main {
   let state = seed_state()
   println("it-support-app listening on http://0.0.0.0:8080")
-  @socket.TcpServer::new(
-    @socket.Addr::parse("0.0.0.0:8080"),
-    reuse_addr=true,
-  ).run_forever(fn(conn, _peer_addr) {
-    let decoder = @http.RequestDecoder::new()
-    while conn.read_some() is Some(data) {
-      match decoder.feed(bytes_to_array(data)) {
-        Err(_) => {
-          let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-          conn.write(array_to_bytes(string_to_bytes(response_str)))
-          return
+  @socket.TcpServer::new(@socket.Addr::parse("0.0.0.0:8080"), reuse_addr=true).run_forever(fn(
+      conn,
+      _peer_addr,
+    ) {
+      let decoder = @http.RequestDecoder::new()
+      while conn.read_some() is Some(data) {
+        match decoder.feed(bytes_to_array(data)) {
+          Err(_) => {
+            let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+            conn.write(array_to_bytes(string_to_bytes(response_str)))
+            return
+          }
+          Ok(_) => ()
         }
-        Ok(_) => ()
+        match decoder.decode() {
+          Ok(Some(request)) => {
+            let response = build_response_for_request(state, request)
+            let response_bytes = @http.encode_response(response)
+            conn.write(array_to_bytes(response_bytes))
+            return
+          }
+          Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
+          Err(_) => {
+            let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+            conn.write(array_to_bytes(string_to_bytes(response_str)))
+            return
+          }
+        }
       }
-      match decoder.decode() {
-        Ok(Some(request)) => {
-          let response = build_response_for_request(state, request)
-          let response_bytes = @http.encode_response(response)
-          conn.write(array_to_bytes(response_bytes))
-          return
-        }
-        Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
-        Err(_) => {
-          let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-          conn.write(array_to_bytes(string_to_bytes(response_str)))
-          return
-        }
-      }
-    }
-  })
+    },
+  )
 }

@@ -409,7 +409,6 @@ pub fn generate_stylesheet() -> String {
     ".airlock-moonchat--workspace {",
     "  background: linear-gradient(160deg, #fff7e6 0%, #fffdf5 100%);",
     "}",
-
     ".airlock-messages {",
     "  display: flex;",
     "  flex-direction: column;",

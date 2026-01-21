@@ -237,7 +237,8 @@ fn message_content_nodes(
         },
       )
       match caption {
-        Some(c) => [image_node, span(class="airlock-message__caption", [text(c)])]
+        Some(c) =>
+          [image_node, span(class="airlock-message__caption", [text(c)])]
         None => [image_node]
       }
     }
@@ -264,7 +265,11 @@ fn message_list(
     }
     div(
       class="airlock-message" +
-        (if is_self { " airlock-message--self" } else { " airlock-message--other" }),
+        (if is_self {
+          " airlock-message--self"
+        } else {
+          " airlock-message--other"
+        }),
       nodes,
     )
   })
@@ -281,29 +286,28 @@ fn input_area(
     Some(p) => p
     None => ""
   }
-
   let disabled_value = match disabled {
     Some(d) => d
     None => false
   }
-
   div(class="airlock-input-area", [
     input(
       type_="text",
       class="airlock-input-field",
       placeholder=placeholder_text,
       disabled=disabled_value,
-      on=@element.events()
-        .keydown(fn(e : @js_dom.KeyboardEvent) {
-          if e.key == "Enter" {
-            let target_element = e.target()
-            let input = @js_dom.HTMLInputElement::cast_from_element(target_element)
-            if input.value != "" {
-              on_send(input.value)
-              input.value = ""
-            }
+      on=@element.events().keydown(fn(e : @js_dom.KeyboardEvent) {
+        if e.key == "Enter" {
+          let target_element = e.target()
+          let input = @js_dom.HTMLInputElement::cast_from_element(
+            target_element,
+          )
+          if input.value != "" {
+            on_send(input.value)
+            input.value = ""
           }
-        })
+        }
+      }),
     ),
     button(
       class="airlock-input-button",
@@ -321,7 +325,7 @@ fn input_area(
           }
           None => ()
         }
-        }),
+      }),
       [text("Send")],
     ),
   ])
