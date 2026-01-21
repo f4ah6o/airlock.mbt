@@ -3,11 +3,8 @@
   "version": "0.1.0",
   "deps": {
     "f4ah6o/direct_sdk": "0.10.0",
-    "f4ah6o/moonchat": "0.2.0",
     "f4ah6o/http11": { "path": "../http11.mbt" },
     "f4ah6o/tmpx": "0.1.0",
-    "mizchi/js": "0.10.10",
-    "mizchi/luna": "0.7.3",
     "moonbitlang/async": "0.16.0",
     "moonbitlang/x": "0.4.38",
     "f4ah6o/duckdb": "0.4.0"
