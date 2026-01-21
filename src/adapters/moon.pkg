@@ -1,5 +1,5 @@
 import {
-  "airlock/airlock/src/shared",
+  "airlock/airlock/shared",
   "f4ah6o/direct_sdk/config" as @direct_config,
   "f4ah6o/direct_sdk/errors" as @direct_errors,
   "f4ah6o/direct_sdk/rpc/client" as @rpc_client,

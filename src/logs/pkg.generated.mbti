@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "airlock/airlock/src/logs"
+package "airlock/airlock/logs"
 
 import(
-  "airlock/airlock/src/shared"
+  "airlock/airlock/shared"
   "f4ah6o/duckdb"
 )
 

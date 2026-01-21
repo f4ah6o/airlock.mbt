@@ -1,0 +1,277 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/api"
+
+import(
+  "airlock/airlock/core"
+  "airlock/airlock/logs"
+  "airlock/airlock/shared"
+  "airlock/airlock/ui"
+)
+
+// Values
+pub fn attempt_reconnect(RealtimeState) -> RealtimeState
+
+pub fn handle_create_draft(AppContext, RequestContext, String) -> ApiResponse
+
+pub fn handle_create_note(AppContext, RequestContext, String) -> ApiResponse
+
+pub fn handle_get_ticket(AppContext, String) -> ApiResponse
+
+pub fn handle_get_timeline(AppContext, String) -> ApiResponse
+
+pub fn handle_get_workspace_items(AppContext, String) -> ApiResponse
+
+pub fn handle_list_tickets(AppContext, RequestContext) -> ApiResponse
+
+pub fn handle_publish_draft(AppContext, RequestContext, String, String) -> ApiResponse
+
+pub fn handle_recheck_draft(AppContext, RequestContext, String, String) -> ApiResponse
+
+pub fn handle_request(AppContext, RequestContext) -> ApiResponse
+
+pub fn handle_update_draft(AppContext, RequestContext, String, String) -> ApiResponse
+
+pub fn message_to_json(@shared.Message) -> String
+
+pub fn messages_to_json(Array[@shared.Message]) -> String
+
+pub fn on_connected(RealtimeState) -> RealtimeState
+
+pub fn on_disconnected(RealtimeState) -> RealtimeState
+
+pub fn on_error(RealtimeState, String) -> RealtimeState
+
+pub fn parse_route(HttpMethod, String) -> Route
+
+pub fn parse_server_event(String) -> ServerEvent?
+
+pub fn process_server_event(RealtimeState, ServerEvent) -> (RealtimeState, EventProcessResult)
+
+pub fn start_typing(RealtimeState, String) -> RealtimeState
+
+pub fn stop_typing(RealtimeState, String) -> RealtimeState
+
+pub fn subscribe_to_ticket(RealtimeState, String) -> RealtimeState
+
+pub fn ticket_to_json(@shared.Ticket) -> String
+
+pub fn tickets_to_json(Array[@shared.Ticket]) -> String
+
+pub fn unsubscribe_from_ticket(RealtimeState, String) -> RealtimeState
+
+pub fn validate_publish_request(@shared.Message) -> ApiError?
+
+// Errors
+
+// Types and methods
+pub(all) enum ApiError {
+  NotFound(String)
+  BadRequest(String)
+  Unauthorized(String)
+  Forbidden(String)
+  Conflict(String)
+  InternalError(String)
+}
+pub fn ApiError::status_code(Self) -> Int
+pub impl Eq for ApiError
+pub impl Show for ApiError
+
+pub(all) struct ApiResponse {
+  status_code : Int
+  body : String
+  content_type : String
+}
+pub fn ApiResponse::created(String) -> Self
+pub fn ApiResponse::error(ApiError) -> Self
+pub fn ApiResponse::json(Int, String) -> Self
+pub fn ApiResponse::no_content() -> Self
+pub fn ApiResponse::ok(String) -> Self
+pub impl Eq for ApiResponse
+pub impl Show for ApiResponse
+
+pub(all) struct AppContext {
+  ticket_repo : @core.TicketRepository
+  message_repo : @core.MessageRepository
+  current_timestamp : () -> String
+  generate_id : () -> String
+  log_store : @logs.LogStore?
+}
+pub fn AppContext::new(@core.TicketRepository, @core.MessageRepository, () -> String, () -> String, log_store? : @logs.LogStore) -> Self
+
+pub(all) struct AppState {
+  view : @ui.AppViewState
+  realtime : RealtimeState
+  current_user_id : String
+}
+pub fn AppState::initial(String, String) -> Self
+pub fn AppState::on_connection_change(Self, Bool) -> Self
+pub fn AppState::select_ticket(Self, String) -> Self
+pub fn AppState::update_realtime(Self, RealtimeState) -> Self
+pub fn AppState::update_view(Self, @ui.AppViewState) -> Self
+pub impl Eq for AppState
+pub impl Show for AppState
+
+pub(all) enum ClientEvent {
+  Subscribe(String)
+  Unsubscribe(String)
+  StartTyping(String)
+  StopTyping(String)
+  Ping
+  Pong
+}
+pub fn ClientEvent::to_json(Self) -> String
+pub impl Eq for ClientEvent
+pub impl Show for ClientEvent
+
+pub(all) enum ConnectionState {
+  Connecting
+  Connected
+  Disconnecting
+  Disconnected
+  Reconnecting(Int)
+  Error(String)
+}
+pub fn ConnectionState::can_send(Self) -> Bool
+pub fn ConnectionState::is_active(Self) -> Bool
+pub impl Eq for ConnectionState
+pub impl Show for ConnectionState
+
+pub(all) struct DraftRequest {
+  text : String
+  attachments : Array[@shared.Attachment]
+  reply_to_message_id : String
+  idempotency_key : String
+}
+pub impl Eq for DraftRequest
+pub impl Show for DraftRequest
+
+pub(all) enum EventProcessResult {
+  NoAction
+  UpdateInbox
+  UpdateTimeline(String)
+  UpdateWorkspace(String)
+  UpdateAll(String)
+  ShowNotification(String)
+  Reconnect
+}
+pub impl Eq for EventProcessResult
+pub impl Show for EventProcessResult
+
+pub(all) enum HttpMethod {
+  Get
+  Post
+  Put
+  Delete
+}
+pub impl Eq for HttpMethod
+pub impl Show for HttpMethod
+
+pub(all) struct NoteRequest {
+  text : String
+  attachments : Array[@shared.Attachment]
+}
+pub impl Eq for NoteRequest
+pub impl Show for NoteRequest
+
+pub(all) struct PublishRequest {
+  idempotency_key : String
+}
+pub impl Eq for PublishRequest
+pub impl Show for PublishRequest
+
+pub(all) struct RealtimeState {
+  ws_manager : WebSocketManager
+  last_event_id : String
+  pending_syncs : Array[String]
+  typing_users : Map[String, Array[String]]
+}
+pub fn RealtimeState::add_typing_user(Self, String, String) -> Self
+pub fn RealtimeState::get_typing_users(Self, String) -> Array[String]
+pub fn RealtimeState::mark_needs_sync(Self, String) -> Self
+pub fn RealtimeState::mark_synced(Self, String) -> Self
+pub fn RealtimeState::new(String) -> Self
+pub fn RealtimeState::remove_typing_user(Self, String, String) -> Self
+pub fn RealtimeState::set_typing(Self, String, Array[String]) -> Self
+pub fn RealtimeState::update_ws(Self, WebSocketManager) -> Self
+pub impl Eq for RealtimeState
+pub impl Show for RealtimeState
+
+pub(all) struct RequestContext {
+  http_method : HttpMethod
+  path : String
+  body : String
+  user_id : String
+  idempotency_key : String
+}
+pub fn RequestContext::new(HttpMethod, String, String, String) -> Self
+pub impl Eq for RequestContext
+pub impl Show for RequestContext
+
+pub(all) enum Route {
+  ListTickets
+  GetTicket(String)
+  GetTimeline(String)
+  GetWorkspaceItems(String)
+  CreateNote(String)
+  CreateDraft(String)
+  UpdateDraft(String, String)
+  RecheckDraft(String, String)
+  PublishDraft(String, String)
+  NotFound
+}
+pub impl Eq for Route
+pub impl Show for Route
+
+pub(all) enum ServerEvent {
+  TicketCreated(String)
+  TicketUpdated(String)
+  TicketClosed(String)
+  NewMessage(String, String)
+  MessageUpdated(String, String)
+  DraftStatusChanged(String, String, String)
+  DraftPublished(String, String)
+  UserJoined(String)
+  UserLeft(String)
+  Typing(String, String)
+  Ping
+  Pong
+  Error(String)
+}
+pub impl Eq for ServerEvent
+pub impl Show for ServerEvent
+
+pub(all) struct WebSocketConfig {
+  url : String
+  reconnect_delay_ms : Int
+  max_reconnect_attempts : Int
+  ping_interval_ms : Int
+  pong_timeout_ms : Int
+}
+pub fn WebSocketConfig::default(String) -> Self
+pub impl Eq for WebSocketConfig
+pub impl Show for WebSocketConfig
+
+pub(all) struct WebSocketManager {
+  config : WebSocketConfig
+  state : ConnectionState
+  subscribed_tickets : Array[String]
+  pending_events : Array[ClientEvent]
+  reconnect_count : Int
+}
+pub fn WebSocketManager::clear_pending(Self) -> Self
+pub fn WebSocketManager::get_pending_events(Self) -> Array[ClientEvent]
+pub fn WebSocketManager::get_reconnect_delay(Self) -> Int
+pub fn WebSocketManager::increment_reconnect(Self) -> Self
+pub fn WebSocketManager::new(WebSocketConfig) -> Self
+pub fn WebSocketManager::queue_event(Self, ClientEvent) -> Self
+pub fn WebSocketManager::set_state(Self, ConnectionState) -> Self
+pub fn WebSocketManager::should_reconnect(Self) -> Bool
+pub fn WebSocketManager::subscribe(Self, String) -> Self
+pub fn WebSocketManager::unsubscribe(Self, String) -> Self
+pub impl Eq for WebSocketManager
+pub impl Show for WebSocketManager
+
+// Type aliases
+
+// Traits
+

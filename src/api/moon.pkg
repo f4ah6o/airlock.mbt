@@ -1,6 +1,6 @@
 import {
-  "airlock/airlock/src/shared",
-  "airlock/airlock/src/core",
-  "airlock/airlock/src/ui",
-  "airlock/airlock/src/logs",
+  "airlock/airlock/shared",
+  "airlock/airlock/core",
+  "airlock/airlock/ui",
+  "airlock/airlock/logs",
 }

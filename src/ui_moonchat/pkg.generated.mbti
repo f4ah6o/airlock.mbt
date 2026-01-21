@@ -1,10 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "airlock/airlock/src/ui_moonchat"
+package "airlock/airlock/ui_moonchat"
 
 import(
-  "airlock/airlock/src/ui"
+  "airlock/airlock/ui"
   "f4ah6o/moonchat/core"
-  "mizchi/luna/luna/dom/element"
+  "mizchi/luna/dom"
 )
 
 // Values
@@ -24,15 +24,15 @@ pub fn sync_from_view_state(@core.ChatStore, @core.ChatStore, @ui.AppViewState) 
 
 pub fn timeline_message_to_moonchat(@ui.TimelineMessage) -> @core.Message
 
-pub fn timeline_view(@core.ChatStore, self_id? : String) -> @element.DomNode
+pub fn timeline_view(@core.ChatStore, String?) -> @dom.DomNode
 
-pub fn timeline_view_from_state(@core.ChatStore, @ui.AppViewState, self_id? : String) -> @element.DomNode
+pub fn timeline_view_from_state(@core.ChatStore, @ui.AppViewState, String?) -> @dom.DomNode
 
 pub fn workspace_item_to_moonchat(@ui.WorkspaceItem) -> @core.Message
 
-pub fn workspace_view(@core.ChatStore, (String) -> Unit, self_id? : String, placeholder? : String, disabled? : Bool) -> @element.DomNode
+pub fn workspace_view(@core.ChatStore, (String) -> Unit, String?, placeholder? : String, disabled? : Bool) -> @dom.DomNode
 
-pub fn workspace_view_from_state(@core.ChatStore, @ui.AppViewState, (String) -> Unit, self_id? : String) -> @element.DomNode
+pub fn workspace_view_from_state(@core.ChatStore, @ui.AppViewState, (String) -> Unit, String?) -> @dom.DomNode
 
 // Errors
 

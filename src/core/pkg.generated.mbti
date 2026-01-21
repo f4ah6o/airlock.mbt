@@ -1,0 +1,79 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/core"
+
+import(
+  "airlock/airlock/shared"
+)
+
+// Values
+pub fn can_edit(@shared.DraftStatus) -> Bool
+
+pub fn can_publish(@shared.DraftStatus) -> Bool
+
+pub fn complete_check(@shared.Message, @shared.AICheckResult) -> Result[@shared.Message, StateTransitionError]
+
+pub fn is_final_state(@shared.DraftStatus) -> Bool
+
+pub fn is_valid_transition(@shared.DraftStatus, @shared.DraftStatus) -> Bool
+
+pub fn publish_draft(@shared.Message, String) -> Result[@shared.Message, StateTransitionError]
+
+pub fn reset_for_edit(@shared.Message) -> Result[@shared.Message, StateTransitionError]
+
+pub fn start_check(@shared.Message) -> Result[@shared.Message, StateTransitionError]
+
+pub fn transition_draft_status(@shared.DraftStatus, @shared.DraftStatus) -> Result[@shared.DraftStatus, StateTransitionError]
+
+// Errors
+
+// Types and methods
+pub(all) struct MessageRepository {
+  messages : Map[String, @shared.Message]
+  by_ticket : Map[String, Array[String]]
+  idempotency_keys : Map[String, String]
+}
+pub fn MessageRepository::create(Self, @shared.Message) -> Result[Unit, RepositoryError]
+pub fn MessageRepository::delete(Self, String) -> Result[Unit, RepositoryError]
+pub fn MessageRepository::get(Self, String) -> Result[@shared.Message, RepositoryError]
+pub fn MessageRepository::get_by_idempotency_key(Self, String) -> @shared.Message?
+pub fn MessageRepository::has_idempotency_key(Self, String) -> Bool
+pub fn MessageRepository::list_by_ticket(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::list_drafts_by_ticket(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::list_public_by_ticket(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::list_workspace_by_ticket(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::new() -> Self
+pub fn MessageRepository::update(Self, @shared.Message) -> Result[Unit, RepositoryError]
+
+pub(all) enum RepositoryError {
+  NotFound(String)
+  DuplicateKey(String)
+  ConcurrencyConflict(String)
+  ValidationError(String)
+}
+pub impl Eq for RepositoryError
+pub impl Show for RepositoryError
+
+pub(all) enum StateTransitionError {
+  InvalidTransition(String)
+  AlreadyPublished
+  NotChecked
+  StillChecking
+}
+pub impl Eq for StateTransitionError
+pub impl Show for StateTransitionError
+
+pub(all) struct TicketRepository {
+  tickets : Map[String, @shared.Ticket]
+}
+pub fn TicketRepository::create(Self, @shared.Ticket) -> Result[Unit, RepositoryError]
+pub fn TicketRepository::delete(Self, String) -> Result[Unit, RepositoryError]
+pub fn TicketRepository::get(Self, String) -> Result[@shared.Ticket, RepositoryError]
+pub fn TicketRepository::list(Self) -> Array[@shared.Ticket]
+pub fn TicketRepository::list_by_status(Self, @shared.TicketStatus) -> Array[@shared.Ticket]
+pub fn TicketRepository::new() -> Self
+pub fn TicketRepository::update(Self, @shared.Ticket) -> Result[Unit, RepositoryError]
+
+// Type aliases
+
+// Traits
+

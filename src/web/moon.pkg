@@ -1,4 +1,1 @@
-import {
-  "airlock/airlock/src/shared" as @shared,
-  "f4ah6o/tmpx/src/tmpx" as @tmpx,
-}
+import { "airlock/airlock/shared" as @shared, "f4ah6o/tmpx/tmpx" as @tmpx }
