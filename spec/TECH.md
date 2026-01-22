@@ -2,13 +2,11 @@
 
 [Moonbit](https://docs.moonbitlang.com/en/latest/)
 
-* Don't write JS/TS from scratch. If a library is missing, create it yourself.
+- Don't write JS/TS from scratch. If a library is missing, create it yourself.
 
-### Main UI Library
-https://github.com/mizchi/luna.mbt
-
-### Chat UI
-https://github.com/f4ah6o/moonchat.mbt
+### UI
+- TMPX (MoonBit HTML builder)
+- HTMX (progressive enhancement, server-driven UI)
 
 ### Adapter/Bot SDK
 
@@ -22,9 +20,8 @@ https://github.com/f4ah6o/direct_sdk.mbt
 ?
 
 #### Other
-
-* APIが使いやすいもの
-* シェアがあるもの
+- APIが使いやすいもの
+- シェアがあるもの
 
 ## リファレンス
 https://zenn.dev/mizchi/articles/moonbit-luna-ui

@@ -1,1 +1,4 @@
-import { "airlock/airlock/shared", "f4ah6o/duckdb" }
+import {
+  "airlock/airlock/shared",
+  "f4ah6o/duckdb",
+}

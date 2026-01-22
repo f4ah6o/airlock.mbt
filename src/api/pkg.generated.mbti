@@ -1,11 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/api"
 
-import(
-  "airlock/airlock/core"
-  "airlock/airlock/logs"
-  "airlock/airlock/shared"
-)
+import {
+  "airlock/airlock/core",
+  "airlock/airlock/logs",
+  "airlock/airlock/shared",
+}
 
 // Values
 pub fn attempt_reconnect(RealtimeState) -> RealtimeState

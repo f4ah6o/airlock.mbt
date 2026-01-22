@@ -1,10 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/logs"
 
-import(
-  "airlock/airlock/shared"
-  "f4ah6o/duckdb"
-)
+import {
+  "airlock/airlock/shared",
+  "f4ah6o/duckdb",
+}
 
 // Values
 

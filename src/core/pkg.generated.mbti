@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/core"
 
-import(
-  "airlock/airlock/shared"
-)
+import {
+  "airlock/airlock/shared",
+}
 
 // Values
 pub fn can_edit(@shared.DraftStatus) -> Bool

@@ -19,8 +19,8 @@ Build a support staff management system (Chat B) that integrates with internal i
 - [ ] Configure linting and formatting rules
 
 ### 1.2 Dependencies Integration
-- [ ] Integrate [luna.mbt](https://github.com/mizchi/luna.mbt) for UI framework
-- [ ] Integrate [deep-chat](https://github.com/OvidijusParsiunas/deep-chat) for chat UI components
+- [ ] Integrate TMPX for server-side HTML generation
+- [ ] Integrate HTMX (vendored JS) for progressive enhancement
 - [ ] Integrate [direct_sdk.mbt](https://github.com/f4ah6o/direct_sdk.mbt) for initial adapter
 - [ ] Create placeholder modules for future adapters (Discord, Slack)
 
@@ -30,7 +30,7 @@ Build a support staff management system (Chat B) that integrates with internal i
   src/
   ├── core/           # Platform-independent business logic
   ├── adapters/       # Chat A platform integrations
-  ├── ui/             # UI components (Luna.mbt)
+  ├── web/            # TMPX view/layouts (SSR)
   ├── api/            # HTTP API handlers
   └── shared/         # Common types and utilities
   ```
@@ -137,9 +137,9 @@ Build a support staff management system (Chat B) that integrates with internal i
 ## Phase 5: UI Implementation
 
 ### 5.1 Layout Foundation
-- [ ] Create 3-pane responsive layout using Luna.mbt
-- [ ] Implement pane resize/collapse functionality
-- [ ] Set up routing/navigation state
+- [ ] Create 3-pane responsive layout using TMPX (SSR)
+- [ ] Implement HTMX partial updates (ticket selection / note updates)
+- [ ] Set up basic navigation state (selected ticket)
 
 ### 5.2 Pane 1: Ticket Inbox (Left)
 - [ ] Ticket list component with filtering
@@ -148,11 +148,11 @@ Build a support staff management system (Chat B) that integrates with internal i
 - [ ] Ticket selection handler
 
 ### 5.3 Pane 2: Public Timeline (Center)
-- [ ] Read-only message timeline component
+- [ ] Public message timeline component
 - [ ] Message bubble rendering (user vs support)
 - [ ] Attachment display (images, files)
 - [ ] Thread/reply visualization
-- [ ] **Ensure no input capability** (view-only enforcement)
+- [ ] **誤爆防止フローに統合** (To‑Be: Draft → Check → Publish)
 
 ### 5.4 Pane 3: Workspace (Right)
 - [ ] Visual distinction with background color (#fffbe6)
@@ -208,6 +208,11 @@ Build a support staff management system (Chat B) that integrates with internal i
 - [ ] Log all publish operations
 - [ ] Log state transitions with timestamps
 - [ ] Track user actions for debugging
+
+### 7.5 Attachment Storage
+- [ ] Define AttachmentStorage interface (Box/kintone/S3 driver)
+- [ ] Ingest inbound attachments on receive
+- [ ] Store external links (signed URLs)
 
 ---
 
