@@ -6,6 +6,7 @@ package "airlock/airlock/cmd/it_support_app"
 // Errors
 
 // Types and methods
+type AppState
 
 // Type aliases
 

@@ -10,7 +10,7 @@
    * it-support-appとdirect4bの接続は f4ah6o/direct_sdk を利用する
    * この仕組みはdirect4b(n:m)だったユーザー(n)とITサポート担当者(m)の関係を
      * direct4b(n:1)-it-support-app(1:m)にする。
-     * さらにdirect4b(メッセージ）だったのをdirect4b:it-support-app(チケット）に変換する
+     * さらにdirect4b(メッセージ)だったのをdirect4b:it-support-app(チケット）に変換する
      * チケット単位で管理することで、ログを外部化できる。
      * logはduckdb.mbtを使ってduckdb(parquet）で外部化する
 ## 問い合わせ管理・応答システム
