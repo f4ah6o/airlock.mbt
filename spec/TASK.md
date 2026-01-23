@@ -53,4 +53,4 @@
 ## テスト/検証 (To‑Be)
 - [x] [P2][impl] State machine テストパターン整理
 - [x] [P2][impl] Repository idempotency のテストケース整理
-- [ ] [P2][impl] Draft→Publish フローのE2E確認項目整理
+- [x] [P2][impl] Draft→Publish フローのE2E確認項目整理
