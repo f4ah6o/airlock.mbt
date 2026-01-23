@@ -19,6 +19,13 @@
   - Chat A (direct4b を主対象、将来Slack/Teams/Line等も視野) との通信を抽象化。
   - 責務: `listenIncoming()` (正規化してCoreへ渡す), `sendOutbound()` (Coreからの指示をAPIへ投げる)。
 
+### direct4b Adapter 最小接続設計 (MVP)
+- **利用SDK:** `f4ah6o/direct_sdk.mbt`
+- **必須設定:** `api_token`, `bot_user_id`, `platform_name`
+- **接続ライフサイクル:** `connect` → `listen_incoming` 登録 → `send_outbound`
+- **ループ防止:** `bot_user_id` と `is_bot` 判定で自己送信を破棄
+- **メッセージ正規化:** direct4b 受信を `NormalizedMessage` に変換し、Coreへ渡す
+
 ---
 
 ## 2. 画面レイアウトと役割 (3ペイン構成 / HTMX+TMPX)

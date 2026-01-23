@@ -8,7 +8,7 @@
 - [x] [P0][impl] MoonBitプロジェクト構造の確認と不足の洗い出し
 - [x] [P0][impl] `moon.mod.json` / `moon.pkg` の整合確認
 - [x] [P0][doc] TMPX/HTMX の依存/配置方法を確定（HTMXはvendor方針）
-- [ ] [P0][impl] Adapter最小構成（direct4b）の接続設計を明文化
+- [x] [P0][impl] Adapter最小構成（direct4b）の接続設計を明文化
 - [x] [P1][doc] Core/Adapter/API/Web の責務境界をREADMEかSPECに追記
 
 ## Core データモデル
@@ -51,6 +51,6 @@
 - [x] [P1][doc] Parquet出力と再ロードの運用メモ追加
 
 ## テスト/検証 (To‑Be)
-- [ ] [P2][impl] State machine テストパターン整理
-- [ ] [P2][impl] Repository idempotency のテストケース整理
+- [x] [P2][impl] State machine テストパターン整理
+- [x] [P2][impl] Repository idempotency のテストケース整理
 - [ ] [P2][impl] Draft→Publish フローのE2E確認項目整理
