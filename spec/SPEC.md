@@ -26,6 +26,17 @@
 - **ループ防止:** `bot_user_id` と `is_bot` 判定で自己送信を破棄
 - **メッセージ正規化:** direct4b 受信を `NormalizedMessage` に変換し、Coreへ渡す
 
+### 受信 → 正規化 → Core (詳細フロー)
+1. **Adapter受信**: `@rpc_client.on_message` で `ReceivedMessage` を受信
+2. **自己送信除外**: `bot_user_id` または `is_bot` を検出して破棄
+3. **正規化**: `direct_message_to_normalized` で `NormalizedMessage` を生成
+   - `channel_id = room_id or talk_id`
+   - `external_id = msg.id`
+   - `timestamp = msg.created.to_string()`
+4. **Ticket解決**: `channel_id` をキーに Ticket を解決/作成
+5. **Message生成**: `origin=chatA`, `visibility=public` として保存
+6. **カーソル更新**: `lastInboundCursor` を `msg.id` / `created` で更新
+
 ---
 
 ## 2. 画面レイアウトと役割 (3ペイン構成 / HTMX+TMPX)

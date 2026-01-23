@@ -34,6 +34,12 @@
 - [x] [P1][doc] 受信時保存 + 署名URL運用の仕様追加
 - [x] [P1][doc] 優先順位 (Box > kintone > others) の運用メモ追加
 
+## Direct4B Adapter 連携プラン
+- [ ] [P0][doc] direct4b 接続ライフサイクルの明文化（connect/listen/send）
+- [ ] [P0][doc] 受信→正規化→Core 連携フローの明文化
+- [ ] [P1][doc] 送信時の metadata/source 付与の調査方針
+- [ ] [P1][doc] 添付受信時のAttachmentStorage連携方針
+
 ## UI (HTMX/TMPX)
 - [x] [P0][doc] 3ペインの責務定義と誤爆防止のUX方針をSPECに反映
 - [x] [P0][doc] HTMXのpartial更新パス設計（/partials/ticket/{id} など）
