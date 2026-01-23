@@ -47,7 +47,7 @@ fn hex_val_byte(b : Byte) -> Int? {
 
 ///|
 fn url_decode(input : String) -> String {
-  let raw = @encoding/utf8.encode(input)
+  let raw = @utf8.encode(input)
   let bytes : Array[Byte] = []
   let percent = Int::to_byte(37)
   let plus = Int::to_byte(43)
@@ -73,7 +73,7 @@ fn url_decode(input : String) -> String {
       i = i + 1
     }
   }
-  @encoding/utf8.decode_lossy(Bytes::from_array(bytes))
+  @utf8.decode_lossy(Bytes::from_array(bytes))
 }
 
 ///|

@@ -3,6 +3,7 @@ import {
   "airlock/airlock/shared" as @shared,
   "airlock/airlock/web" as @web,
   "f4ah6o/http11" as @http,
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/async" as @async,
   "moonbitlang/async/socket" as @socket,
   "moonbitlang/x/fs" as @fs,
