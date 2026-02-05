@@ -6,9 +6,9 @@
     "f4ah6o/http11": {
       "path": "../http11.mbt"
     },
-    "f4ah6o/tmpx": "0.3.0",
+    "f4ah6o/tmpx": "0.4.0",
     "moonbitlang/async": "0.16.4",
-    "moonbitlang/x": "0.4.38",
+    "moonbitlang/x": "0.4.40",
     "f4ah6o/duckdb": "0.5.0"
   },
   "readme": "README.mbt.md",

@@ -1,12 +1,12 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/adapters"
 
-import(
-  "airlock/airlock/shared"
-  "f4ah6o/direct_sdk/rpc/client"
-  "f4ah6o/direct_sdk/types"
-  "moonbitlang/async"
-)
+import {
+  "airlock/airlock/shared",
+  "f4ah6o/direct_sdk/rpc/client",
+  "f4ah6o/direct_sdk/types",
+  "moonbitlang/async",
+}
 
 // Values
 pub fn direct_message_to_normalized(AdapterConfig, @types.ReceivedMessage) -> NormalizedMessage
@@ -57,7 +57,7 @@ pub(all) struct DirectAdapter {
   mut state : AdapterState
 }
 pub async fn DirectAdapter::connect(Self, @async.TaskGroup[Unit]) -> Result[Unit, AdapterError]
-pub async fn DirectAdapter::disconnect(Self) -> Result[Unit, AdapterError]
+pub fn DirectAdapter::disconnect(Self) -> Result[Unit, AdapterError]
 pub fn DirectAdapter::listen_incoming(Self, (NormalizedMessage) -> Unit) -> Unit
 pub fn DirectAdapter::new(AdapterConfig, endpoint? : String, proxy_url? : String, bot_name? : String, debug? : Bool, timeout_ms? : Int) -> Self
 pub fn DirectAdapter::platform_name(Self) -> String

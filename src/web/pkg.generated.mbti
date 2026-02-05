@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "airlock/airlock/web"
 
-import(
-  "airlock/airlock/shared"
-)
+import {
+  "airlock/airlock/shared",
+}
 
 // Values
 pub fn render_center_partial(@shared.Ticket?, Array[@shared.Message]) -> String

@@ -141,7 +141,7 @@ pub async fn DirectAdapter::connect(
 
 ///|
 /// Disconnect from Direct
-pub async fn DirectAdapter::disconnect(
+pub fn DirectAdapter::disconnect(
   self : DirectAdapter,
 ) -> Result[Unit, AdapterError] {
   match @rpc_client.close(self.client) {

@@ -19,6 +19,21 @@ fn app_style() -> String {
 }
 
 ///|
+fn parts(
+  attrs : Array[@tmpx.Attr],
+  children : Array[@tmpx.Node],
+) -> Array[@tmpx.Part] {
+  let out : Array[@tmpx.Part] = []
+  for attr in attrs {
+    out.push(@tmpx.part_attr(attr))
+  }
+  for child in children {
+    out.push(@tmpx.part_child(child))
+  }
+  out
+}
+
+///|
 fn render_ticket_item(
   ticket : @shared.Ticket,
   selected_id : String?,
@@ -31,24 +46,32 @@ fn render_ticket_item(
   if is_active {
     classes.push("is-active")
   }
-  @tmpx.li([], [
-    @tmpx.button(
-      [
-        @tmpx.class_list(classes),
-        @tmpx.type_("button"),
-        @tmpx.hx_get("/partials/ticket/" + ticket.ticket_id),
-        @tmpx.hx_target("#pane-center"),
-        @tmpx.hx_swap(@tmpx.HxSwap::InnerHTML),
-        @tmpx.hx_push_url(true),
-      ],
-      [
-        @tmpx.strong([], [@tmpx.text(ticket.subject)]),
-        @tmpx.p([], [
-          @tmpx.text("#" + ticket.ticket_id + " - " + ticket.status.to_string()),
-        ]),
-      ],
-    ),
-  ])
+  @tmpx.li_parts(
+    parts([], [
+      @tmpx.button_parts(
+        parts(
+          [
+            @tmpx.class_list(classes),
+            @tmpx.attr("type", "button"),
+            @tmpx.mx_get("/partials/ticket/" + ticket.ticket_id),
+            @tmpx.mx_target("#pane-center"),
+            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+            @tmpx.attr("mx-push-url", "true"),
+          ],
+          [
+            @tmpx.strong_parts(parts([], [@tmpx.text(ticket.subject)])),
+            @tmpx.p_parts(
+              parts([], [
+                @tmpx.text(
+                  "#" + ticket.ticket_id + " - " + ticket.status.to_string(),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    ]),
+  )
 }
 
 ///|
@@ -56,30 +79,38 @@ fn ticket_list(
   tickets : Array[@shared.Ticket],
   selected_id : String?,
 ) -> @tmpx.Node {
-  @tmpx.ul(
-    [@tmpx.class_("ticket-list")],
-    tickets.map(fn(ticket) { render_ticket_item(ticket, selected_id) }),
+  @tmpx.ul_parts(
+    parts(
+      [@tmpx.class_("ticket-list")],
+      tickets.map(fn(ticket) { render_ticket_item(ticket, selected_id) }),
+    ),
   )
 }
 
 ///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
-  @tmpx.li([@tmpx.class_("chat-item")], [
-    @tmpx.div([@tmpx.class_("chat-item__meta")], [
-      @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
+  @tmpx.li_parts(
+    parts([@tmpx.class_("chat-item")], [
+      @tmpx.div_parts(
+        parts([@tmpx.class_("chat-item__meta")], [
+          @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
+        ]),
+      ),
+      @tmpx.div_parts(
+        parts([@tmpx.class_("chat-item__text")], [@tmpx.text(message.text)]),
+      ),
     ]),
-    @tmpx.div([@tmpx.class_("chat-item__text")], [@tmpx.text(message.text)]),
-  ])
+  )
 }
 
 ///|
 fn message_list(messages : Array[@shared.Message]) -> @tmpx.Node {
   if messages.is_empty() {
-    return @tmpx.div([@tmpx.class_("placeholder")], [
-      @tmpx.text("No messages yet."),
-    ])
+    return @tmpx.div_parts(
+      parts([@tmpx.class_("placeholder")], [@tmpx.text("No messages yet.")]),
+    )
   }
-  @tmpx.ul([@tmpx.class_("chat-list")], messages.map(message_item))
+  @tmpx.ul_parts(parts([@tmpx.class_("chat-list")], messages.map(message_item)))
 }
 
 ///|
@@ -90,38 +121,50 @@ fn center_nodes(
   match ticket {
     None =>
       [
-        @tmpx.h2([@tmpx.class_("pane-title")], [@tmpx.text("Timeline")]),
-        @tmpx.div([@tmpx.class_("placeholder")], [
-          @tmpx.text("Select a ticket to view the conversation."),
-        ]),
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [@tmpx.text("Timeline")]),
+        ),
+        @tmpx.div_parts(
+          parts([@tmpx.class_("placeholder")], [
+            @tmpx.text("Select a ticket to view the conversation."),
+          ]),
+        ),
       ]
     Some(t) =>
       [
-        @tmpx.h2([@tmpx.class_("pane-title")], [
-          @tmpx.text("Timeline - " + t.subject),
-        ]),
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [
+            @tmpx.text("Timeline - " + t.subject),
+          ]),
+        ),
         message_list(timeline),
-        @tmpx.form(
-          [
-            @tmpx.class_("form"),
-            @tmpx.method_("post"),
-            @tmpx.hx_post("/tickets/" + t.ticket_id + "/reply"),
-            @tmpx.hx_target("#pane-center"),
-            @tmpx.hx_swap(@tmpx.HxSwap::InnerHTML),
-          ],
-          [
-            @tmpx.textarea(
-              [
-                @tmpx.class_("input"),
-                @tmpx.name_("text"),
-                @tmpx.placeholder("Write a public reply..."),
-              ],
-              [],
-            ),
-            @tmpx.button([@tmpx.class_("btn"), @tmpx.type_("submit")], [
-              @tmpx.text("Send reply"),
-            ]),
-          ],
+        @tmpx.form_parts(
+          parts(
+            [
+              @tmpx.class_("form"),
+              @tmpx.attr("method", "post"),
+              @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+              @tmpx.mx_target("#pane-center"),
+              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+            ],
+            [
+              @tmpx.textarea_parts(
+                parts(
+                  [
+                    @tmpx.class_("input"),
+                    @tmpx.attr("name", "text"),
+                    @tmpx.attr("placeholder", "Write a public reply..."),
+                  ],
+                  [],
+                ),
+              ),
+              @tmpx.button_parts(
+                parts([@tmpx.class_("btn"), @tmpx.attr("type", "submit")], [
+                  @tmpx.text("Send reply"),
+                ]),
+              ),
+            ],
+          ),
         ),
       ]
   }
@@ -135,39 +178,51 @@ fn right_nodes(
   match ticket {
     None =>
       [
-        @tmpx.h2([@tmpx.class_("pane-title")], [@tmpx.text("Notes")]),
-        @tmpx.div([@tmpx.class_("placeholder")], [
-          @tmpx.text("Select a ticket to write internal notes."),
-        ]),
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [@tmpx.text("Notes")]),
+        ),
+        @tmpx.div_parts(
+          parts([@tmpx.class_("placeholder")], [
+            @tmpx.text("Select a ticket to write internal notes."),
+          ]),
+        ),
       ]
     Some(t) =>
       [
-        @tmpx.h2([@tmpx.class_("pane-title")], [
-          @tmpx.text("Notes - " + t.subject),
-        ]),
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [
+            @tmpx.text("Notes - " + t.subject),
+          ]),
+        ),
         message_list(notes),
-        @tmpx.form(
-          [
-            @tmpx.class_("form"),
-            @tmpx.method_("post"),
-            @tmpx.hx_post("/tickets/" + t.ticket_id + "/notes"),
-            @tmpx.hx_target("#pane-right"),
-            @tmpx.hx_swap(@tmpx.HxSwap::InnerHTML),
-          ],
-          [
-            @tmpx.textarea(
-              [
-                @tmpx.class_("input"),
-                @tmpx.name_("text"),
-                @tmpx.placeholder("Write an internal note..."),
-              ],
-              [],
-            ),
-            @tmpx.button(
-              [@tmpx.class_("btn secondary"), @tmpx.type_("submit")],
-              [@tmpx.text("Add note")],
-            ),
-          ],
+        @tmpx.form_parts(
+          parts(
+            [
+              @tmpx.class_("form"),
+              @tmpx.attr("method", "post"),
+              @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+              @tmpx.mx_target("#pane-right"),
+              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+            ],
+            [
+              @tmpx.textarea_parts(
+                parts(
+                  [
+                    @tmpx.class_("input"),
+                    @tmpx.attr("name", "text"),
+                    @tmpx.attr("placeholder", "Write an internal note..."),
+                  ],
+                  [],
+                ),
+              ),
+              @tmpx.button_parts(
+                parts(
+                  [@tmpx.class_("btn secondary"), @tmpx.attr("type", "submit")],
+                  [@tmpx.text("Add note")],
+                ),
+              ),
+            ],
+          ),
         ),
       ]
   }
@@ -184,30 +239,52 @@ pub fn render_index(
     Some(t) => Some(t.ticket_id)
     None => None
   }
-  let page = @tmpx.html_([@tmpx.lang_attr("ja")], [
-    @tmpx.head([], [
-      @tmpx.meta([@tmpx.charset("utf-8")]),
-      @tmpx.title([], [@tmpx.text("it-support-app")]),
-      @tmpx.style_([], [@tmpx.raw_html(app_style())]),
-    ]),
-    @tmpx.body([], [
-      @tmpx.div([@tmpx.class_("app")], [
-        @tmpx.aside([@tmpx.id_("pane-left"), @tmpx.class_("pane")], [
-          @tmpx.h2([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
-          ticket_list(tickets, selected_id),
+  let page = @tmpx.html_parts(
+    parts([@tmpx.attr("lang", "ja")], [
+      @tmpx.head_parts(
+        parts([], [
+          @tmpx.meta_attrs([@tmpx.attr("charset", "utf-8")]),
+          @tmpx.title_parts(parts([], [@tmpx.text("it-support-app")])),
+          @tmpx.unsafe_custom_element(
+            "style",
+            parts([], [@tmpx.raw(app_style())]),
+          ),
         ]),
-        @tmpx.main_(
-          [@tmpx.id_("pane-center"), @tmpx.class_("pane")],
-          center_nodes(selected_ticket, timeline),
-        ),
-        @tmpx.aside(
-          [@tmpx.id_("pane-right"), @tmpx.class_("pane")],
-          right_nodes(selected_ticket, notes),
-        ),
-      ]),
-      @tmpx.script([@tmpx.src("/assets/htmx.js")], []),
+      ),
+      @tmpx.body_parts(
+        parts([], [
+          @tmpx.div_parts(
+            parts([@tmpx.class_("app")], [
+              @tmpx.aside_parts(
+                parts([@tmpx.id_("pane-left"), @tmpx.class_("pane")], [
+                  @tmpx.h2_parts(
+                    parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
+                  ),
+                  ticket_list(tickets, selected_id),
+                ]),
+              ),
+              @tmpx.main_parts(
+                parts(
+                  [@tmpx.id_("pane-center"), @tmpx.class_("pane")],
+                  center_nodes(selected_ticket, timeline),
+                ),
+              ),
+              @tmpx.aside_parts(
+                parts(
+                  [@tmpx.id_("pane-right"), @tmpx.class_("pane")],
+                  right_nodes(selected_ticket, notes),
+                ),
+              ),
+            ]),
+          ),
+          @tmpx.unsafe_custom_element(
+            "script",
+            parts([@tmpx.src("/assets/htmx.js")], []),
+          ),
+        ]),
+      ),
     ]),
-  ])
+  )
   "<!DOCTYPE html>" + @tmpx.render(page)
 }
 
@@ -217,17 +294,19 @@ pub fn render_ticket_partial(
   timeline : Array[@shared.Message],
   notes : Array[@shared.Message],
 ) -> String {
-  let right_oob = @tmpx.div(
-    [
-      @tmpx.id_("pane-right"),
-      @tmpx.class_("pane"),
-      @tmpx.hx_swap_oob(style=@tmpx.HxSwap::InnerHTML),
-    ],
-    right_nodes(ticket, notes),
+  let right_oob = @tmpx.div_parts(
+    parts(
+      [
+        @tmpx.id_("pane-right"),
+        @tmpx.class_("pane"),
+        @tmpx.attr("mx-swap-oob", @tmpx.MxSwap::InnerHTML.to_string()),
+      ],
+      right_nodes(ticket, notes),
+    ),
   )
   let nodes = center_nodes(ticket, timeline)
   nodes.push(right_oob)
-  @tmpx.render_nodes(nodes)
+  @tmpx.render(@tmpx.fragment(nodes))
 }
 
 ///|
@@ -235,7 +314,7 @@ pub fn render_center_partial(
   ticket : @shared.Ticket?,
   timeline : Array[@shared.Message],
 ) -> String {
-  @tmpx.render_nodes(center_nodes(ticket, timeline))
+  @tmpx.render(@tmpx.fragment(center_nodes(ticket, timeline)))
 }
 
 ///|
@@ -243,5 +322,5 @@ pub fn render_right_partial(
   ticket : @shared.Ticket?,
   notes : Array[@shared.Message],
 ) -> String {
-  @tmpx.render_nodes(right_nodes(ticket, notes))
+  @tmpx.render(@tmpx.fragment(right_nodes(ticket, notes)))
 }
