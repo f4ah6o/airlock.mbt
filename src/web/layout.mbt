@@ -142,8 +142,10 @@ fn center_nodes(
           parts(
             [
               @tmpx.class_("form"),
+              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/reply"),
               @tmpx.attr("method", "post"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+              @tmpx.mx_trigger("submit"),
               @tmpx.mx_target("#pane-center"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
             ],
@@ -199,8 +201,10 @@ fn right_nodes(
           parts(
             [
               @tmpx.class_("form"),
+              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/notes"),
               @tmpx.attr("method", "post"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+              @tmpx.mx_trigger("submit"),
               @tmpx.mx_target("#pane-right"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
             ],

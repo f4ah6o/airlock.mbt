@@ -390,38 +390,68 @@ fn build_response_for_request(
 }
 
 ///|
+fn try_bind_server(port : Int) -> @socket.TcpServer? {
+  let addr = "0.0.0.0:" + port.to_string()
+  let result : Result[@socket.TcpServer, Error] = try? @socket.TcpServer::new(
+    @socket.Addr::parse(addr),
+    reuse_addr=true,
+  )
+  match result {
+    Ok(server) => Some(server)
+    Err(_) => None
+  }
+}
+
+///|
+fn bind_first_available_port(
+  start_port : Int,
+  max_attempts : Int,
+) -> (@socket.TcpServer, Int)? {
+  for offset in 0..<max_attempts {
+    let port = start_port + offset
+    match try_bind_server(port) {
+      Some(server) => return Some((server, port))
+      None => ()
+    }
+  }
+  None
+}
+
+///|
 async fn main {
   let state = seed_state()
-  println("it-support-app listening on http://0.0.0.0:8080")
-  @socket.TcpServer::new(@socket.Addr::parse("0.0.0.0:8080"), reuse_addr=true).run_forever(fn(
-      conn,
-      _peer_addr,
-    ) {
-      let decoder = @http.RequestDecoder::new()
-      while conn.read_some() is Some(data) {
-        match decoder.feed(bytes_to_array(data)) {
-          Err(_) => {
-            let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-            conn.write(array_to_bytes(string_to_bytes(response_str)))
-            return
+  match bind_first_available_port(8080, 50) {
+    Some((server, port)) => {
+      println("it-support-app listening on http://0.0.0.0:" + port.to_string())
+      server.run_forever(fn(conn, _peer_addr) {
+        let decoder = @http.RequestDecoder::new()
+        while conn.read_some() is Some(data) {
+          match decoder.feed(bytes_to_array(data)) {
+            Err(_) => {
+              let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+              conn.write(array_to_bytes(string_to_bytes(response_str)))
+              return
+            }
+            Ok(_) => ()
           }
-          Ok(_) => ()
+          match decoder.decode() {
+            Ok(Some(request)) => {
+              let response = build_response_for_request(state, request)
+              let response_bytes = @http.encode_response(response)
+              conn.write(array_to_bytes(response_bytes))
+              return
+            }
+            Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
+            Err(_) => {
+              let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+              conn.write(array_to_bytes(string_to_bytes(response_str)))
+              return
+            }
+          }
         }
-        match decoder.decode() {
-          Ok(Some(request)) => {
-            let response = build_response_for_request(state, request)
-            let response_bytes = @http.encode_response(response)
-            conn.write(array_to_bytes(response_bytes))
-            return
-          }
-          Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
-          Err(_) => {
-            let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-            conn.write(array_to_bytes(string_to_bytes(response_str)))
-            return
-          }
-        }
-      }
-    },
-  )
+      })
+    }
+    None =>
+      println("failed to bind server: no available port in range 8080..8129")
+  }
 }

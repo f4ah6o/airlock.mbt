@@ -21,6 +21,9 @@ test-update:
 run:
     moon run src/main --target {{target}}
 
+run-native:
+    moon run src/cmd/it_support_app --target native
+
 info:
     moon info
 
