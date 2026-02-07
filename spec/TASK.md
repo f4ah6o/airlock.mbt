@@ -7,7 +7,7 @@
 ## MVP / Phase 1-3 (基盤)
 - [x] [P0][impl] MoonBitプロジェクト構造の確認と不足の洗い出し
 - [x] [P0][impl] `moon.mod.json` / `moon.pkg` の整合確認
-- [x] [P0][doc] TMPX/HTMX の依存/配置方法を確定（HTMXはvendor方針）
+- [x] [P0][doc] TMPX/MHX の依存/配置方法を確定（MHXはvendor方針）
 - [x] [P0][impl] Adapter最小構成（direct4b）の接続設計を明文化
 - [x] [P1][doc] Core/Adapter/API/Web の責務境界をREADMEかSPECに追記
 
@@ -40,9 +40,9 @@
 - [ ] [P1][doc] 送信時の metadata/source 付与の調査方針
 - [ ] [P1][doc] 添付受信時のAttachmentStorage連携方針
 
-## UI (HTMX/TMPX)
+## UI (MHX/TMPX)
 - [x] [P0][doc] 3ペインの責務定義と誤爆防止のUX方針をSPECに反映
-- [x] [P0][doc] HTMXのpartial更新パス設計（/partials/ticket/{id} など）
+- [x] [P0][doc] MHXのpartial更新パス設計（/partials/ticket/{id} など）
 - [x] [P1][doc] Pane2の公開操作を Draft→Check→Publish に統合する方針を明文化
 - [x] [P1][doc] Pane3の内部チャット/ドラフト/レビュー表示要件の整理
 - [x] [P1][doc] Ticket Inboxの表示項目（assignees/lastPublicAt/ドラフトバッジ）を明記
@@ -50,7 +50,7 @@
 ## API (To‑Be)
 - [x] [P1][doc] /api のJSONレスポンスは全フィールド返却と明記
 - [x] [P1][doc] replyToMessageId の保存必須・UI将来対応を明記
-- [x] [P1][doc] HATEOASはHTML(HTMX)に集約する方針を明記
+- [x] [P1][doc] HATEOASはHTML(MHX)に集約する方針を明記
 
 ## Logging / Audit
 - [x] [P1][doc] DuckDBログの保存項目とイベント種別の整理

@@ -6,7 +6,7 @@
 
 ### UI
 - TMPX (MoonBit HTML builder)
-- HTMX (progressive enhancement, server-driven UI)
+- MHX (progressive enhancement, server-driven UI)
 
 ### Adapter/Bot SDK
 

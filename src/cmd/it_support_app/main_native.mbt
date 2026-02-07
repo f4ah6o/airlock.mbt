@@ -285,8 +285,8 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
     }
     return html_response(@web.render_index(tickets, selected, timeline, notes))
   }
-  if path == "/assets/htmx.js" {
-    match read_asset("src/cmd/it_support_app/public/htmx.js") {
+  if path == "/assets/mhx.js" {
+    match read_asset("src/cmd/it_support_app/public/mhx.js") {
       Some(content) => return js_response(content)
       None => return not_found_response()
     }

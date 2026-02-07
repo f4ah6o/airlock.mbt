@@ -279,7 +279,15 @@ pub fn render_index(
           ),
           @tmpx.unsafe_custom_element(
             "script",
-            parts([@tmpx.src("/assets/htmx.js")], []),
+            parts([@tmpx.src("/assets/mhx.js")], []),
+          ),
+          @tmpx.unsafe_custom_element(
+            "script",
+            parts([], [
+              @tmpx.raw(
+                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); }",
+              ),
+            ]),
           ),
         ]),
       ),

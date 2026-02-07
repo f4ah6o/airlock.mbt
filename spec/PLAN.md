@@ -20,7 +20,7 @@ Build a support staff management system (Chat B) that integrates with internal i
 
 ### 1.2 Dependencies Integration
 - [ ] Integrate TMPX for server-side HTML generation
-- [ ] Integrate HTMX (vendored JS) for progressive enhancement
+- [ ] Integrate MHX (vendored JS) for progressive enhancement
 - [ ] Integrate [direct_sdk.mbt](https://github.com/f4ah6o/direct_sdk.mbt) for initial adapter
 - [ ] Create placeholder modules for future adapters (Discord, Slack)
 
@@ -138,7 +138,7 @@ Build a support staff management system (Chat B) that integrates with internal i
 
 ### 5.1 Layout Foundation
 - [ ] Create 3-pane responsive layout using TMPX (SSR)
-- [ ] Implement HTMX partial updates (ticket selection / note updates)
+- [ ] Implement MHX partial updates (ticket selection / note updates)
 - [ ] Set up basic navigation state (selected ticket)
 
 ### 5.2 Pane 1: Ticket Inbox (Left)

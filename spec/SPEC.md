@@ -39,9 +39,9 @@
 
 ---
 
-## 2. 画面レイアウトと役割 (3ペイン構成 / HTMX+TMPX)
-**UIはHTMXを中心に、TMPXでHTMLを生成する。**
-言語をMoonBitに統一し、Server‑Side Rendering + HTMX partial更新で実装する。
+## 2. 画面レイアウトと役割 (3ペイン構成 / MHX+TMPX)
+**UIはMHXを中心に、TMPXでHTMLを生成する。**
+言語をMoonBitに統一し、Server‑Side Rendering + MHX partial更新で実装する。
 
 ### Pane 1: Ticket Inbox (左)
 - **役割:** 未解決案件の管理。
@@ -194,11 +194,11 @@
 
 ---
 
-## 7. API / HTMX インターフェース
-**HTMXを主軸に、HTMLレスポンスをハイパーメディアとして扱う。**
+## 7. API / MHX インターフェース
+**MHXを主軸に、HTMLレスポンスをハイパーメディアとして扱う。**
 JSON API は To‑Be または機械連携用として段階導入する。
 
-### 7.1 HTML (HTMX) エンドポイント (MVP)
+### 7.1 HTML (MHX) エンドポイント (MVP)
 - `GET /` : 3ペイン画面
 - `GET /partials/ticket/{id}` : 中央+右ペインの差分
 - `POST /tickets/{id}/reply` : 公開返信 (MVPのみ)
@@ -217,7 +217,7 @@ JSON API は To‑Be または機械連携用として段階導入する。
 
 **レスポンス方針:** Ticket/Message は **全フィールドを返す** (chatA/assignees/lastPublicAt/attachments/replyToMessageId/idempotencyKey 等を省略しない)。  
 **replyToMessageId:** 保存は必須、UIは将来対応。  
-**HATEOAS方針:** HTMXのフォーム/リンクをサーバーが返すHTMLに集約する (JSONの `_links` は任意)。
+**HATEOAS方針:** MHXのフォーム/リンクをサーバーが返すHTMLに集約する (JSONの `_links` は任意)。
 
 ---
 
