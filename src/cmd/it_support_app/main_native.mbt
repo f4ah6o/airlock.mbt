@@ -268,6 +268,28 @@ fn read_asset(path : String) -> String? {
 }
 
 ///|
+fn ascii_lower_u16(c : UInt16) -> Int {
+  let code = c.to_int()
+  if code >= 65 && code <= 90 {
+    return code + 32
+  }
+  code
+}
+
+///|
+fn ascii_eq_ignore_case(a : String, b : String) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i in 0..<a.length() {
+    if ascii_lower_u16(a[i]) != ascii_lower_u16(b[i]) {
+      return false
+    }
+  }
+  true
+}
+
+///|
 fn full_page_response(
   state : AppState,
   preferred_ticket_id : String?,
@@ -299,8 +321,8 @@ fn full_page_response(
 fn is_mhx_request(request : @http.Request) -> Bool {
   for header in request.headers {
     let (name, value) = header
-    if (name == "HX-Request" || name == "hx-request") &&
-      (value == "true" || value == "TRUE" || value == "True") {
+    if ascii_eq_ignore_case(name, "HX-Request") &&
+      ascii_eq_ignore_case(value, "true") {
       return true
     }
   }
