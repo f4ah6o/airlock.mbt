@@ -6,7 +6,7 @@ fn app_style() -> String {
     ".pane { background: #fff; border: 1px solid rgba(15, 23, 42, 0.08); border-radius: 12px; padding: 12px; min-height: 0; display: flex; flex-direction: column; }",
     ".pane-title { font-size: 14px; font-weight: 600; margin: 0 0 8px 0; color: #0f172a; }",
     ".ticket-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }",
-    ".ticket-item { border: 1px solid transparent; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; }",
+    ".ticket-item { border: 1px solid transparent; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; display: block; text-decoration: none; color: inherit; }",
     ".ticket-item.is-active { border-color: #2563eb; background: #eff6ff; }", ".chat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; overflow: auto; flex: 1; }",
     ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; }",
     ".chat-item__meta { font-size: 11px; color: #64748b; margin-bottom: 4px; }",
@@ -48,15 +48,15 @@ fn render_ticket_item(
   }
   @tmpx.li_parts(
     parts([], [
-      @tmpx.button_parts(
+      @tmpx.a_parts(
         parts(
           [
             @tmpx.class_list(classes),
-            @tmpx.attr("type", "button"),
+            @tmpx.href("/tickets/" + ticket.ticket_id),
             @tmpx.mx_get("/partials/ticket/" + ticket.ticket_id),
             @tmpx.mx_target("#pane-center"),
             @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-            @tmpx.attr("mx-push-url", "true"),
+            @tmpx.attr("mx-push-url", "/tickets/" + ticket.ticket_id),
           ],
           [
             @tmpx.strong_parts(parts([], [@tmpx.text(ticket.subject)])),
@@ -302,10 +302,30 @@ pub fn render_index(
 
 ///|
 pub fn render_ticket_partial(
+  tickets : Array[@shared.Ticket],
   ticket : @shared.Ticket?,
   timeline : Array[@shared.Message],
   notes : Array[@shared.Message],
 ) -> String {
+  let selected_id = match ticket {
+    Some(t) => Some(t.ticket_id)
+    None => None
+  }
+  let left_oob = @tmpx.aside_parts(
+    parts(
+      [
+        @tmpx.id_("pane-left"),
+        @tmpx.class_("pane"),
+        @tmpx.attr("mx-swap-oob", @tmpx.MxSwap::InnerHTML.to_string()),
+      ],
+      [
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
+        ),
+        ticket_list(tickets, selected_id),
+      ],
+    ),
+  )
   let right_oob = @tmpx.div_parts(
     parts(
       [
@@ -318,6 +338,7 @@ pub fn render_ticket_partial(
   )
   let nodes = center_nodes(ticket, timeline)
   nodes.push(right_oob)
+  nodes.push(left_oob)
   @tmpx.render(@tmpx.fragment(nodes))
 }
 

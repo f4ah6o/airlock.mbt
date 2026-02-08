@@ -341,8 +341,12 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
     }
   }
   let parts = split_path(path)
+  if parts.length() == 2 && parts[0] == "tickets" {
+    return full_page_response(state, Some(parts[1]))
+  }
   if parts.length() == 3 && parts[0] == "partials" && parts[1] == "ticket" {
     let ticket_id = parts[2]
+    let tickets = state.ticket_repo.list()
     let ticket = match state.ticket_repo.get(ticket_id) {
       Ok(t) => Some(t)
       Err(_) => None
@@ -358,7 +362,9 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
         .list_workspace_by_ticket(t.ticket_id)
         .filter(fn(m) { m.visibility == @shared.Internal })
     }
-    return html_response(@web.render_ticket_partial(ticket, timeline, notes))
+    return html_response(
+      @web.render_ticket_partial(tickets, ticket, timeline, notes),
+    )
   }
   not_found_response()
 }
