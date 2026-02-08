@@ -268,22 +268,49 @@ fn read_asset(path : String) -> String? {
 }
 
 ///|
+fn full_page_response(
+  state : AppState,
+  preferred_ticket_id : String?,
+) -> @http.Response {
+  let tickets = state.ticket_repo.list()
+  let selected = match preferred_ticket_id {
+    Some(ticket_id) =>
+      match state.ticket_repo.get(ticket_id) {
+        Ok(t) => Some(t)
+        Err(_) => if tickets.is_empty() { None } else { Some(tickets[0]) }
+      }
+    None => if tickets.is_empty() { None } else { Some(tickets[0]) }
+  }
+  let timeline = match selected {
+    None => []
+    Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
+  }
+  let notes = match selected {
+    None => []
+    Some(t) =>
+      state.message_repo
+      .list_workspace_by_ticket(t.ticket_id)
+      .filter(fn(m) { m.visibility == @shared.Internal })
+  }
+  html_response(@web.render_index(tickets, selected, timeline, notes))
+}
+
+///|
+fn is_mhx_request(request : @http.Request) -> Bool {
+  for header in request.headers {
+    let (name, value) = header
+    if (name == "HX-Request" || name == "hx-request") &&
+      (value == "true" || value == "TRUE" || value == "True") {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn handle_get(state : AppState, path : String) -> @http.Response {
   if path == "/" {
-    let tickets = state.ticket_repo.list()
-    let selected = if tickets.is_empty() { None } else { Some(tickets[0]) }
-    let timeline = match selected {
-      None => []
-      Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
-    }
-    let notes = match selected {
-      None => []
-      Some(t) =>
-        state.message_repo
-        .list_workspace_by_ticket(t.ticket_id)
-        .filter(fn(m) { m.visibility == @shared.Internal })
-    }
-    return html_response(@web.render_index(tickets, selected, timeline, notes))
+    return full_page_response(state, None)
   }
   if path == "/assets/mhx.js" {
     match read_asset("src/cmd/it_support_app/public/mhx.js") {
@@ -319,6 +346,7 @@ fn handle_post(
   state : AppState,
   path : String,
   body : Array[Byte],
+  mhx_request : Bool,
 ) -> @http.Response {
   let parts = split_path(path)
   if parts.length() == 3 && parts[0] == "tickets" {
@@ -350,7 +378,10 @@ fn handle_post(
           Err(_) => None
         }
         let timeline = state.message_repo.list_public_by_ticket(ticket_id)
-        return html_response(@web.render_center_partial(ticket, timeline))
+        if mhx_request {
+          return html_response(@web.render_center_partial(ticket, timeline))
+        }
+        return full_page_response(state, Some(ticket_id))
       }
       "notes" => {
         let msg = @shared.Message::new_note(
@@ -367,7 +398,10 @@ fn handle_post(
         let notes = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
-        return html_response(@web.render_right_partial(ticket, notes))
+        if mhx_request {
+          return html_response(@web.render_right_partial(ticket, notes))
+        }
+        return full_page_response(state, Some(ticket_id))
       }
       _ => ()
     }
@@ -381,9 +415,10 @@ fn build_response_for_request(
   request : @http.Request,
 ) -> @http.Response {
   let path = path_only(request.uri)
+  let mhx_request = is_mhx_request(request)
   match request.http_method {
     "GET" => handle_get(state, path)
-    "POST" => handle_post(state, path, request.body)
+    "POST" => handle_post(state, path, request.body, mhx_request)
     _ =>
       build_response(405, "Method Not Allowed", "", "text/plain; charset=utf-8")
   }
