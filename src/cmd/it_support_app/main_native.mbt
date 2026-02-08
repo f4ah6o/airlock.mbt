@@ -31,6 +31,18 @@ fn body_to_string(body : Array[Byte]) -> String {
 }
 
 ///|
+fn is_blank_text(s : String) -> Bool {
+  let mut has_non_space = false
+  for c in s {
+    if c != ' ' && c != '\n' && c != '\r' && c != '\t' {
+      has_non_space = true
+      break
+    }
+  }
+  !has_non_space
+}
+
+///|
 fn hex_val_byte(b : Byte) -> Int? {
   let code = b.to_int()
   if code >= 48 && code <= 57 {
@@ -246,6 +258,15 @@ fn html_response(body : String) -> @http.Response {
 }
 
 ///|
+fn html_error_response(
+  status : Int,
+  reason : String,
+  body : String,
+) -> @http.Response {
+  build_response(status, reason, body, "text/html; charset=utf-8")
+}
+
+///|
 fn not_found_response() -> @http.Response {
   build_response(404, "Not Found", "404 Not Found", "text/plain; charset=utf-8")
 }
@@ -385,13 +406,27 @@ fn handle_post(
       Some(v) => v
       None => ""
     }
-    if text == "" {
-      return build_response(
-        400, "Bad Request", "text is required", "text/plain; charset=utf-8",
-      )
-    }
     match action {
       "reply" => {
+        let ticket = match state.ticket_repo.get(ticket_id) {
+          Ok(t) => Some(t)
+          Err(_) => None
+        }
+        let timeline = state.message_repo.list_public_by_ticket(ticket_id)
+        if is_blank_text(text) {
+          if mhx_request {
+            return html_error_response(
+              422,
+              "Unprocessable Entity",
+              @web.render_center_partial(
+                ticket,
+                timeline,
+                Some("Reply text is required."),
+              ),
+            )
+          }
+          return full_page_response(state, Some(ticket_id))
+        }
         let msg = @shared.Message::new(
           next_id(state.id_counter, "msg"),
           ticket_id,
@@ -401,24 +436,15 @@ fn handle_post(
           "support",
         )
         let _ = state.message_repo.create(msg)
-        let ticket = match state.ticket_repo.get(ticket_id) {
-          Ok(t) => Some(t)
-          Err(_) => None
-        }
-        let timeline = state.message_repo.list_public_by_ticket(ticket_id)
+        let timeline2 = state.message_repo.list_public_by_ticket(ticket_id)
         if mhx_request {
-          return html_response(@web.render_center_partial(ticket, timeline))
+          return html_response(
+            @web.render_center_partial(ticket, timeline2, None),
+          )
         }
         return full_page_response(state, Some(ticket_id))
       }
       "notes" => {
-        let msg = @shared.Message::new_note(
-          next_id(state.id_counter, "note"),
-          ticket_id,
-          text,
-          "support",
-        )
-        let _ = state.message_repo.create(msg)
         let ticket = match state.ticket_repo.get(ticket_id) {
           Ok(t) => Some(t)
           Err(_) => None
@@ -426,8 +452,32 @@ fn handle_post(
         let notes = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
+        if is_blank_text(text) {
+          if mhx_request {
+            return html_error_response(
+              422,
+              "Unprocessable Entity",
+              @web.render_right_partial(
+                ticket,
+                notes,
+                Some("Note text is required."),
+              ),
+            )
+          }
+          return full_page_response(state, Some(ticket_id))
+        }
+        let msg = @shared.Message::new_note(
+          next_id(state.id_counter, "note"),
+          ticket_id,
+          text,
+          "support",
+        )
+        let _ = state.message_repo.create(msg)
+        let notes2 = state.message_repo
+          .list_workspace_by_ticket(ticket_id)
+          .filter(fn(m) { m.visibility == @shared.Internal })
         if mhx_request {
-          return html_response(@web.render_right_partial(ticket, notes))
+          return html_response(@web.render_right_partial(ticket, notes2, None))
         }
         return full_page_response(state, Some(ticket_id))
       }
