@@ -12,7 +12,6 @@ fn seed_ticket(ctx : AppContext, ticket_id : String) -> Unit {
   let chat_a = @shared.ChatAMetadata::new("direct4b", "dm_001", "ts_001")
   let ticket = @shared.Ticket::new(ticket_id, "Test Ticket", chat_a)
   let _ = ctx.ticket_repo.create(ticket)
-
 }
 
 ///|

@@ -536,7 +536,7 @@ async fn main {
   match bind_first_available_port(8080, 50) {
     Some((server, port)) => {
       println("it-support-app listening on http://0.0.0.0:" + port.to_string())
-      server.run_forever(fn(conn, _peer_addr) {
+      server.run_forever(async fn(conn, _peer_addr) {
         let decoder = @http.RequestDecoder::new()
         while conn.read_some() is Some(data) {
           match decoder.feed(bytes_to_array(data)) {

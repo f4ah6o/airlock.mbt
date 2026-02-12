@@ -155,7 +155,7 @@ fn log_entries_from_result(
   let entries : Array[@shared.LogEntry] = []
   for row = 0; row < result.row_count(); row = row + 1 {
     entries.push(log_entry_from_row(result, row))
-  } else {
+  } nobreak {
     ()
   }
   entries
