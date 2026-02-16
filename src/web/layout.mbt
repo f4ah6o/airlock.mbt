@@ -90,6 +90,29 @@ fn ticket_list(
 
 ///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
+  fn escape_html_text(text : String) -> String {
+    let sb = StringBuilder::new(size_hint=text.length())
+    for c in text {
+      if c == '&' {
+        sb.write_string("&amp;")
+      } else if c == '<' {
+        sb.write_string("&lt;")
+      } else if c == '>' {
+        sb.write_string("&gt;")
+      } else if c == '"' {
+        sb.write_string("&quot;")
+      } else if c == '\'' {
+        sb.write_string("&#39;")
+      } else if c.to_int() > 127 {
+        sb.write_string("&#")
+        sb.write_string(c.to_int().to_string())
+        sb.write_string(";")
+      } else {
+        sb.write_char(c)
+      }
+    }
+    sb.to_string()
+  }
   @tmpx.li_parts(
     parts([@tmpx.class_("chat-item")], [
       @tmpx.div_parts(
@@ -98,7 +121,9 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
         ]),
       ),
       @tmpx.div_parts(
-        parts([@tmpx.class_("chat-item__text")], [@tmpx.text(message.text)]),
+        parts([@tmpx.class_("chat-item__text")], [
+          @tmpx.raw(escape_html_text(message.text)),
+        ]),
       ),
     ]),
   )
@@ -141,7 +166,14 @@ fn center_nodes(
         ),
         message_list(timeline),
         @tmpx.form_parts(
-          parts([@tmpx.class_("form")], [
+          parts([
+            @tmpx.class_("form"),
+            @tmpx.id_("reply-form-" + t.ticket_id),
+            @tmpx.attr("data-form-kind", "reply"),
+            @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+            @tmpx.mx_target("#pane-center"),
+            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+          ], [
             match error {
               Some(msg) =>
                 @tmpx.div_parts(
@@ -153,21 +185,28 @@ fn center_nodes(
               parts(
                 [
                   @tmpx.class_("input"),
-                  @tmpx.attr("name", "text"),
+                  @tmpx.attr("name", "reply_text"),
+                  @tmpx.attr("data-shift-enter-send", "true"),
+                  @tmpx.attr("data-submit-role", "reply"),
                   @tmpx.attr("placeholder", "Write a public reply..."),
                 ],
                 [],
               ),
             ),
+            @tmpx.unsafe_custom_element(
+              "input",
+              parts([
+                @tmpx.attr("type", "hidden"),
+                @tmpx.attr("name", "intent"),
+                @tmpx.attr("value", "reply"),
+              ], []),
+            ),
             @tmpx.button_parts(
               parts(
                 [
                   @tmpx.class_("btn"),
-                  @tmpx.attr("type", "button"),
-                  @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
-                  @tmpx.attr("mx-include", "closest form"),
-                  @tmpx.mx_target("#pane-center"),
-                  @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+                  @tmpx.attr("type", "submit"),
+                  @tmpx.attr("data-submit-role", "reply"),
                 ],
                 [@tmpx.text("Send reply")],
               ),
@@ -205,7 +244,14 @@ fn right_nodes(
         ),
         message_list(notes),
         @tmpx.form_parts(
-          parts([@tmpx.class_("form")], [
+          parts([
+            @tmpx.class_("form"),
+            @tmpx.id_("note-form-" + t.ticket_id),
+            @tmpx.attr("data-form-kind", "note"),
+            @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+            @tmpx.mx_target("#pane-right"),
+            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+          ], [
             match error {
               Some(msg) =>
                 @tmpx.div_parts(
@@ -217,21 +263,28 @@ fn right_nodes(
               parts(
                 [
                   @tmpx.class_("input"),
-                  @tmpx.attr("name", "text"),
+                  @tmpx.attr("name", "note_text"),
+                  @tmpx.attr("data-shift-enter-send", "true"),
+                  @tmpx.attr("data-submit-role", "note"),
                   @tmpx.attr("placeholder", "Write an internal note..."),
                 ],
                 [],
               ),
             ),
+            @tmpx.unsafe_custom_element(
+              "input",
+              parts([
+                @tmpx.attr("type", "hidden"),
+                @tmpx.attr("name", "intent"),
+                @tmpx.attr("value", "note"),
+              ], []),
+            ),
             @tmpx.button_parts(
               parts(
                 [
                   @tmpx.class_("btn secondary"),
-                  @tmpx.attr("type", "button"),
-                  @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
-                  @tmpx.attr("mx-include", "closest form"),
-                  @tmpx.mx_target("#pane-right"),
-                  @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+                  @tmpx.attr("type", "submit"),
+                  @tmpx.attr("data-submit-role", "note"),
                 ],
                 [@tmpx.text("Add note")],
               ),
@@ -299,7 +352,7 @@ pub fn render_index(
             "script",
             parts([], [
               @tmpx.raw(
-                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); }",
+                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); } document.addEventListener('keydown', function (event) { var target = event.target; if (!(target instanceof HTMLTextAreaElement)) { return; } if (target.getAttribute('data-shift-enter-send') !== 'true') { return; } if (event.key !== 'Enter' || !event.shiftKey) { return; } event.preventDefault(); var form = target.closest('form'); if (!form) { return; } if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; } form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });",
               ),
             ]),
           ),

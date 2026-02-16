@@ -23,11 +23,24 @@ fn string_to_bytes(s : String) -> Array[Byte] {
 
 ///|
 fn body_to_string(body : Array[Byte]) -> String {
-  let mut result = ""
-  for b in body {
-    result = result + Int::unsafe_to_char(b.to_int()).to_string()
+  @utf8.decode_lossy(Bytes::from_array(body))
+}
+
+///|
+fn split_form_pair(pair : String) -> (String, String) {
+  let key = StringBuilder::new(size_hint=pair.length())
+  let value = StringBuilder::new(size_hint=pair.length())
+  let mut found_eq = false
+  for c in pair {
+    if !found_eq && c == '=' {
+      found_eq = true
+    } else if found_eq {
+      value.write_char(c)
+    } else {
+      key.write_char(c)
+    }
   }
-  result
+  (key.to_string(), value.to_string())
 }
 
 ///|
@@ -43,8 +56,8 @@ fn is_blank_text(s : String) -> Bool {
 }
 
 ///|
-fn hex_val_byte(b : Byte) -> Int? {
-  let code = b.to_int()
+fn hex_val_char(c : Char) -> Int? {
+  let code = c.to_int()
   if code >= 48 && code <= 57 {
     return Some(code - 48)
   }
@@ -58,34 +71,113 @@ fn hex_val_byte(b : Byte) -> Int? {
 }
 
 ///|
-fn url_decode(input : String) -> String {
-  let raw = @utf8.encode(input)
-  let bytes : Array[Byte] = []
-  let percent = Int::to_byte(37)
-  let plus = Int::to_byte(43)
+fn is_utf8_continuation_byte(b : Int) -> Bool {
+  (b & 0xC0) == 0x80
+}
+
+///|
+fn utf8_bytes_to_string(bytes : Array[Int]) -> String {
+  let sb = StringBuilder::new(size_hint=bytes.length())
   let mut i = 0
-  while i < raw.length() {
-    let b = raw[i]
-    if b == percent && i + 2 < raw.length() {
-      match (hex_val_byte(raw[i + 1]), hex_val_byte(raw[i + 2])) {
-        (Some(hi), Some(lo)) => {
-          bytes.push(Int::to_byte(hi * 16 + lo))
-          i = i + 3
-        }
-        _ => {
-          bytes.push(b)
-          i = i + 1
-        }
-      }
-    } else if b == plus {
-      bytes.push(Int::to_byte(32))
+  while i < bytes.length() {
+    let b0 = bytes[i]
+    if b0 < 0x80 {
+      sb.write_char(Int::unsafe_to_char(b0))
       i = i + 1
+    } else if b0 >= 0xC2 &&
+      b0 <= 0xDF &&
+      i + 1 < bytes.length() &&
+      is_utf8_continuation_byte(bytes[i + 1]) {
+      let b1 = bytes[i + 1]
+      let cp = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+      sb.write_char(Int::unsafe_to_char(cp))
+      i = i + 2
+    } else if b0 >= 0xE0 &&
+      b0 <= 0xEF &&
+      i + 2 < bytes.length() &&
+      is_utf8_continuation_byte(bytes[i + 1]) &&
+      is_utf8_continuation_byte(bytes[i + 2]) {
+      let b1 = bytes[i + 1]
+      let b2 = bytes[i + 2]
+      let valid = (b0 != 0xE0 || b1 >= 0xA0) &&
+        (b0 != 0xED || b1 <= 0x9F)
+      if valid {
+        let cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
+        sb.write_char(Int::unsafe_to_char(cp))
+        i = i + 3
+      } else {
+        sb.write_char('\u{FFFD}')
+        i = i + 1
+      }
+    } else if b0 >= 0xF0 &&
+      b0 <= 0xF4 &&
+      i + 3 < bytes.length() &&
+      is_utf8_continuation_byte(bytes[i + 1]) &&
+      is_utf8_continuation_byte(bytes[i + 2]) &&
+      is_utf8_continuation_byte(bytes[i + 3]) {
+      let b1 = bytes[i + 1]
+      let b2 = bytes[i + 2]
+      let b3 = bytes[i + 3]
+      let valid = (b0 != 0xF0 || b1 >= 0x90) &&
+        (b0 != 0xF4 || b1 <= 0x8F)
+      if valid {
+        let cp = ((b0 & 0x07) << 18) |
+          ((b1 & 0x3F) << 12) |
+          ((b2 & 0x3F) << 6) |
+          (b3 & 0x3F)
+        sb.write_char(Int::unsafe_to_char(cp))
+        i = i + 4
+      } else {
+        sb.write_char('\u{FFFD}')
+        i = i + 1
+      }
     } else {
-      bytes.push(b)
+      sb.write_char('\u{FFFD}')
       i = i + 1
     }
   }
-  @utf8.decode_lossy(Bytes::from_array(bytes))
+  sb.to_string()
+}
+
+///|
+fn url_decode(input : String) -> String {
+  let sb = StringBuilder::new(size_hint=input.length())
+  let pending_bytes : Array[Int] = []
+  fn flush_pending(sb : StringBuilder, pending_bytes : Array[Int]) -> Unit {
+    if !pending_bytes.is_empty() {
+      sb.write_string(utf8_bytes_to_string(pending_bytes))
+      pending_bytes.clear()
+    }
+  }
+  let mut i = 0
+  while i < input.length() {
+    let c = input[i].unsafe_to_char()
+    if c == '%' && i + 2 < input.length() {
+      let c1 = input[i + 1].unsafe_to_char()
+      let c2 = input[i + 2].unsafe_to_char()
+      match (hex_val_char(c1), hex_val_char(c2)) {
+        (Some(hi), Some(lo)) => {
+          pending_bytes.push(hi * 16 + lo)
+          i = i + 3
+        }
+        _ => {
+          flush_pending(sb, pending_bytes)
+          sb.write_char('%')
+          i = i + 1
+        }
+      }
+    } else if c == '+' {
+      flush_pending(sb, pending_bytes)
+      sb.write_char(' ')
+      i = i + 1
+    } else {
+      flush_pending(sb, pending_bytes)
+      sb.write_char(c)
+      i = i + 1
+    }
+  }
+  flush_pending(sb, pending_bytes)
+  sb.to_string()
 }
 
 ///|
@@ -95,20 +187,12 @@ fn parse_form(body : String) -> Map[String, String] {
     return result
   }
   for pair_view in body.split("&") {
-    let iter = pair_view.to_string().split("=")
-    let key_view = iter.next()
-    let value_view = iter.next()
-    match key_view {
-      None => ()
-      Some(kv) => {
-        let key = kv.to_string()
-        let value = match value_view {
-          Some(v) => v.to_string()
-          None => ""
-        }
-        result.set(url_decode(key), url_decode(value))
-      }
+    let pair = pair_view.to_string()
+    if pair == "" {
+      continue
     }
+    let (key, value) = split_form_pair(pair)
+    result.set(url_decode(key), url_decode(value))
   }
   result
 }
@@ -402,17 +486,40 @@ fn handle_post(
     let ticket_id = parts[1]
     let action = parts[2]
     let form = parse_form(body_to_string(body))
-    let text = match form.get("text") {
+    let intent = match form.get("intent") {
       Some(v) => v
       None => ""
     }
     match action {
       "reply" => {
+        let text = match form.get("reply_text") {
+          Some(v) => v
+          None => ""
+        }
         let ticket = match state.ticket_repo.get(ticket_id) {
           Ok(t) => Some(t)
           Err(_) => None
         }
         let timeline = state.message_repo.list_public_by_ticket(ticket_id)
+        if intent == "note" {
+          if mhx_request {
+            return html_error_response(
+              422,
+              "Unprocessable Entity",
+              @web.render_center_partial(
+                ticket,
+                timeline,
+                Some("Invalid form intent for reply."),
+              ),
+            )
+          }
+          return build_response(
+            422,
+            "Unprocessable Entity",
+            "Invalid form intent for reply.",
+            "text/plain; charset=utf-8",
+          )
+        }
         if is_blank_text(text) {
           if mhx_request {
             return html_error_response(
@@ -425,7 +532,12 @@ fn handle_post(
               ),
             )
           }
-          return full_page_response(state, Some(ticket_id))
+          return build_response(
+            422,
+            "Unprocessable Entity",
+            "Reply text is required.",
+            "text/plain; charset=utf-8",
+          )
         }
         let msg = @shared.Message::new(
           next_id(state.id_counter, "msg"),
@@ -445,6 +557,10 @@ fn handle_post(
         return full_page_response(state, Some(ticket_id))
       }
       "notes" => {
+        let text = match form.get("note_text") {
+          Some(v) => v
+          None => ""
+        }
         let ticket = match state.ticket_repo.get(ticket_id) {
           Ok(t) => Some(t)
           Err(_) => None
@@ -452,6 +568,25 @@ fn handle_post(
         let notes = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
+        if intent == "reply" {
+          if mhx_request {
+            return html_error_response(
+              422,
+              "Unprocessable Entity",
+              @web.render_right_partial(
+                ticket,
+                notes,
+                Some("Invalid form intent for note."),
+              ),
+            )
+          }
+          return build_response(
+            422,
+            "Unprocessable Entity",
+            "Invalid form intent for note.",
+            "text/plain; charset=utf-8",
+          )
+        }
         if is_blank_text(text) {
           if mhx_request {
             return html_error_response(
@@ -464,7 +599,12 @@ fn handle_post(
               ),
             )
           }
-          return full_page_response(state, Some(ticket_id))
+          return build_response(
+            422,
+            "Unprocessable Entity",
+            "Note text is required.",
+            "text/plain; charset=utf-8",
+          )
         }
         let msg = @shared.Message::new_note(
           next_id(state.id_counter, "note"),
