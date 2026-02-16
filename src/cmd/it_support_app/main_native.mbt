@@ -99,8 +99,7 @@ fn utf8_bytes_to_string(bytes : Array[Int]) -> String {
       is_utf8_continuation_byte(bytes[i + 2]) {
       let b1 = bytes[i + 1]
       let b2 = bytes[i + 2]
-      let valid = (b0 != 0xE0 || b1 >= 0xA0) &&
-        (b0 != 0xED || b1 <= 0x9F)
+      let valid = (b0 != 0xE0 || b1 >= 0xA0) && (b0 != 0xED || b1 <= 0x9F)
       if valid {
         let cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
         sb.write_char(Int::unsafe_to_char(cp))
@@ -118,8 +117,7 @@ fn utf8_bytes_to_string(bytes : Array[Int]) -> String {
       let b1 = bytes[i + 1]
       let b2 = bytes[i + 2]
       let b3 = bytes[i + 3]
-      let valid = (b0 != 0xF0 || b1 >= 0x90) &&
-        (b0 != 0xF4 || b1 <= 0x8F)
+      let valid = (b0 != 0xF0 || b1 >= 0x90) && (b0 != 0xF4 || b1 <= 0x8F)
       if valid {
         let cp = ((b0 & 0x07) << 18) |
           ((b1 & 0x3F) << 12) |
@@ -490,9 +488,7 @@ fn handle_post(
   mhx_request : Bool,
 ) -> @http.Response {
   let parts = split_path(path)
-  if parts.length() == 5 &&
-    parts[0] == "tickets" &&
-    parts[2] == "notes" {
+  if parts.length() == 5 && parts[0] == "tickets" && parts[2] == "notes" {
     let ticket_id = parts[1]
     let message_id = parts[3]
     let note_action = parts[4]
@@ -521,10 +517,7 @@ fn handle_post(
         )
       }
       return build_response(
-        422,
-        "Unprocessable Entity",
-        "Invalid form intent for note.",
-        "text/plain; charset=utf-8",
+        422, "Unprocessable Entity", "Invalid form intent for note.", "text/plain; charset=utf-8",
       )
     }
     match state.message_repo.get(message_id) {
@@ -544,7 +537,9 @@ fn handle_post(
             .list_workspace_by_ticket(ticket_id)
             .filter(fn(m) { m.visibility == @shared.Internal })
           if mhx_request {
-            return html_response(@web.render_right_partial(ticket, notes2, None))
+            return html_response(
+              @web.render_right_partial(ticket, notes2, None),
+            )
           }
           return redirect_to_ticket(ticket_id)
         }
@@ -567,19 +562,18 @@ fn handle_post(
                 )
               }
               return build_response(
-                422,
-                "Unprocessable Entity",
-                "Note text is required.",
-                "text/plain; charset=utf-8",
+                422, "Unprocessable Entity", "Note text is required.", "text/plain; charset=utf-8",
               )
             }
-            let updated = @shared.Message::{ ..note_message, text }
+            let updated = @shared.Message::{ ..note_message, text, }
             let _ = state.message_repo.update(updated)
             let notes2 = state.message_repo
               .list_workspace_by_ticket(ticket_id)
               .filter(fn(m) { m.visibility == @shared.Internal })
             if mhx_request {
-              return html_response(@web.render_right_partial(ticket, notes2, None))
+              return html_response(
+                @web.render_right_partial(ticket, notes2, None),
+              )
             }
             return redirect_to_ticket(ticket_id)
           }
@@ -602,7 +596,9 @@ fn handle_post(
               .list_workspace_by_ticket(ticket_id)
               .filter(fn(m) { m.visibility == @shared.Internal })
             if mhx_request {
-              return html_response(@web.render_right_partial(ticket, notes2, None))
+              return html_response(
+                @web.render_right_partial(ticket, notes2, None),
+              )
             }
             return redirect_to_ticket(ticket_id)
           }
@@ -643,10 +639,7 @@ fn handle_post(
             )
           }
           return build_response(
-            422,
-            "Unprocessable Entity",
-            "Invalid form intent for reply.",
-            "text/plain; charset=utf-8",
+            422, "Unprocessable Entity", "Invalid form intent for reply.", "text/plain; charset=utf-8",
           )
         }
         if is_blank_text(text) {
@@ -662,10 +655,7 @@ fn handle_post(
             )
           }
           return build_response(
-            422,
-            "Unprocessable Entity",
-            "Reply text is required.",
-            "text/plain; charset=utf-8",
+            422, "Unprocessable Entity", "Reply text is required.", "text/plain; charset=utf-8",
           )
         }
         let msg = @shared.Message::new(
@@ -710,10 +700,7 @@ fn handle_post(
             )
           }
           return build_response(
-            422,
-            "Unprocessable Entity",
-            "Invalid form intent for note.",
-            "text/plain; charset=utf-8",
+            422, "Unprocessable Entity", "Invalid form intent for note.", "text/plain; charset=utf-8",
           )
         }
         if is_blank_text(text) {
@@ -729,10 +716,7 @@ fn handle_post(
             )
           }
           return build_response(
-            422,
-            "Unprocessable Entity",
-            "Note text is required.",
-            "text/plain; charset=utf-8",
+            422, "Unprocessable Entity", "Note text is required.", "text/plain; charset=utf-8",
           )
         }
         let msg = @shared.Message::new_note(

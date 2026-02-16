@@ -11,10 +11,9 @@ fn app_style() -> String {
     ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; }",
     ".chat-item__meta { font-size: 11px; color: #64748b; margin-bottom: 4px; }",
     ".chat-item__text { font-size: 13px; color: #0f172a; white-space: pre-wrap; }",
-    ".note-edit-form { display: grid; gap: 6px; margin-top: 8px; }",
-    ".note-actions { display: flex; gap: 6px; justify-content: flex-end; }",
-    ".note-inline-input { min-height: 56px; }",
-    ".form { margin-top: 10px; display: grid; gap: 8px; }", ".input { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.16); padding: 8px; font-size: 13px; }",
+    ".note-edit-form { display: grid; gap: 6px; margin-top: 8px; }", ".note-actions { display: flex; gap: 6px; justify-content: flex-end; }",
+    ".note-inline-input { min-height: 56px; }", ".form { margin-top: 10px; display: grid; gap: 8px; }",
+    ".input { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.16); padding: 8px; font-size: 13px; }",
     ".form-error { font-size: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px; }",
     ".btn { background: #2563eb; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }",
     ".btn.secondary { background: #0f172a; }", ".placeholder { color: #94a3b8; font-size: 13px; padding: 8px 0; }",
@@ -149,64 +148,85 @@ fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
         ]),
       ),
       @tmpx.form_parts(
-        parts([
-          @tmpx.class_("note-edit-form"),
-          @tmpx.mx_post(
-            "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
-          ),
-          @tmpx.mx_target("#pane-right"),
-          @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-        ], [
-          @tmpx.textarea_parts(
-            parts([
-              @tmpx.class_("input note-inline-input"),
-              @tmpx.attr("name", "note_text"),
-            ], [@tmpx.raw(escape_html_text(message.text))]),
-          ),
-          @tmpx.unsafe_custom_element(
-            "input",
-            parts([
-              @tmpx.attr("type", "hidden"),
-              @tmpx.attr("name", "intent"),
-              @tmpx.attr("value", "note"),
-            ], []),
-          ),
-          @tmpx.div_parts(
-            parts([@tmpx.class_("note-actions")], [
-              @tmpx.button_parts(
-                parts([
-                  @tmpx.class_("btn secondary"),
-                  @tmpx.attr("type", "submit"),
-                ], [@tmpx.text("Save note")]),
+        parts(
+          [
+            @tmpx.class_("note-edit-form"),
+            @tmpx.mx_post(
+              "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
+            ),
+            @tmpx.mx_target("#pane-right"),
+            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+          ],
+          [
+            @tmpx.textarea_parts(
+              parts(
+                [
+                  @tmpx.class_("input note-inline-input"),
+                  @tmpx.attr("name", "note_text"),
+                ],
+                [@tmpx.raw(escape_html_text(message.text))],
               ),
-            ]),
-          ),
-        ]),
+            ),
+            @tmpx.unsafe_custom_element(
+              "input",
+              parts(
+                [
+                  @tmpx.attr("type", "hidden"),
+                  @tmpx.attr("name", "intent"),
+                  @tmpx.attr("value", "note"),
+                ],
+                [],
+              ),
+            ),
+            @tmpx.div_parts(
+              parts([@tmpx.class_("note-actions")], [
+                @tmpx.button_parts(
+                  parts(
+                    [
+                      @tmpx.class_("btn secondary"),
+                      @tmpx.attr("type", "submit"),
+                    ],
+                    [@tmpx.text("Save note")],
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
       ),
       @tmpx.form_parts(
-        parts([
-          @tmpx.class_("note-actions"),
-          @tmpx.attr("method", "post"),
-          @tmpx.attr(
-            "action",
-            "/tickets/" + ticket_id + "/notes/" + message.message_id + "/delete",
-          ),
-        ], [
-          @tmpx.unsafe_custom_element(
-            "input",
-            parts([
-              @tmpx.attr("type", "hidden"),
-              @tmpx.attr("name", "intent"),
-              @tmpx.attr("value", "note"),
-            ], []),
-          ),
-          @tmpx.button_parts(
-            parts([
-              @tmpx.class_("btn"),
-              @tmpx.attr("type", "submit"),
-            ], [@tmpx.text("Delete note")]),
-          ),
-        ]),
+        parts(
+          [
+            @tmpx.class_("note-actions"),
+            @tmpx.attr("method", "post"),
+            @tmpx.attr(
+              "action",
+              "/tickets/" +
+              ticket_id +
+              "/notes/" +
+              message.message_id +
+              "/delete",
+            ),
+          ],
+          [
+            @tmpx.unsafe_custom_element(
+              "input",
+              parts(
+                [
+                  @tmpx.attr("type", "hidden"),
+                  @tmpx.attr("name", "intent"),
+                  @tmpx.attr("value", "note"),
+                ],
+                [],
+              ),
+            ),
+            @tmpx.button_parts(
+              parts([@tmpx.class_("btn"), @tmpx.attr("type", "submit")], [
+                @tmpx.text("Delete note"),
+              ]),
+            ),
+          ],
+        ),
       ),
     ]),
   )
@@ -267,52 +287,58 @@ fn center_nodes(
         ),
         message_list(timeline),
         @tmpx.form_parts(
-          parts([
-            @tmpx.class_("form"),
-            @tmpx.id_("reply-form-" + t.ticket_id),
-            @tmpx.attr("data-form-kind", "reply"),
-            @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
-            @tmpx.mx_target("#pane-center"),
-            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-          ], [
-            match error {
-              Some(msg) =>
-                @tmpx.div_parts(
-                  parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
-                )
-              None => @tmpx.fragment([])
-            },
-            @tmpx.textarea_parts(
-              parts(
-                [
-                  @tmpx.class_("input"),
-                  @tmpx.attr("name", "reply_text"),
-                  @tmpx.attr("data-shift-enter-send", "true"),
-                  @tmpx.attr("data-submit-role", "reply"),
-                  @tmpx.attr("placeholder", "Write a public reply..."),
-                ],
-                [],
+          parts(
+            [
+              @tmpx.class_("form"),
+              @tmpx.id_("reply-form-" + t.ticket_id),
+              @tmpx.attr("data-form-kind", "reply"),
+              @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+              @tmpx.mx_target("#pane-center"),
+              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+            ],
+            [
+              match error {
+                Some(msg) =>
+                  @tmpx.div_parts(
+                    parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
+                  )
+                None => @tmpx.fragment([])
+              },
+              @tmpx.textarea_parts(
+                parts(
+                  [
+                    @tmpx.class_("input"),
+                    @tmpx.attr("name", "reply_text"),
+                    @tmpx.attr("data-shift-enter-send", "true"),
+                    @tmpx.attr("data-submit-role", "reply"),
+                    @tmpx.attr("placeholder", "Write a public reply..."),
+                  ],
+                  [],
+                ),
               ),
-            ),
-            @tmpx.unsafe_custom_element(
-              "input",
-              parts([
-                @tmpx.attr("type", "hidden"),
-                @tmpx.attr("name", "intent"),
-                @tmpx.attr("value", "reply"),
-              ], []),
-            ),
-            @tmpx.button_parts(
-              parts(
-                [
-                  @tmpx.class_("btn"),
-                  @tmpx.attr("type", "submit"),
-                  @tmpx.attr("data-submit-role", "reply"),
-                ],
-                [@tmpx.text("Send reply")],
+              @tmpx.unsafe_custom_element(
+                "input",
+                parts(
+                  [
+                    @tmpx.attr("type", "hidden"),
+                    @tmpx.attr("name", "intent"),
+                    @tmpx.attr("value", "reply"),
+                  ],
+                  [],
+                ),
               ),
-            ),
-          ]),
+              @tmpx.button_parts(
+                parts(
+                  [
+                    @tmpx.class_("btn"),
+                    @tmpx.attr("type", "submit"),
+                    @tmpx.attr("data-submit-role", "reply"),
+                  ],
+                  [@tmpx.text("Send reply")],
+                ),
+              ),
+            ],
+          ),
         ),
       ]
   }
@@ -345,52 +371,58 @@ fn right_nodes(
         ),
         note_message_list(t.ticket_id, notes),
         @tmpx.form_parts(
-          parts([
-            @tmpx.class_("form"),
-            @tmpx.id_("note-form-" + t.ticket_id),
-            @tmpx.attr("data-form-kind", "note"),
-            @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
-            @tmpx.mx_target("#pane-right"),
-            @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-          ], [
-            match error {
-              Some(msg) =>
-                @tmpx.div_parts(
-                  parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
-                )
-              None => @tmpx.fragment([])
-            },
-            @tmpx.textarea_parts(
-              parts(
-                [
-                  @tmpx.class_("input"),
-                  @tmpx.attr("name", "note_text"),
-                  @tmpx.attr("data-shift-enter-send", "true"),
-                  @tmpx.attr("data-submit-role", "note"),
-                  @tmpx.attr("placeholder", "Write an internal note..."),
-                ],
-                [],
+          parts(
+            [
+              @tmpx.class_("form"),
+              @tmpx.id_("note-form-" + t.ticket_id),
+              @tmpx.attr("data-form-kind", "note"),
+              @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+              @tmpx.mx_target("#pane-right"),
+              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+            ],
+            [
+              match error {
+                Some(msg) =>
+                  @tmpx.div_parts(
+                    parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
+                  )
+                None => @tmpx.fragment([])
+              },
+              @tmpx.textarea_parts(
+                parts(
+                  [
+                    @tmpx.class_("input"),
+                    @tmpx.attr("name", "note_text"),
+                    @tmpx.attr("data-shift-enter-send", "true"),
+                    @tmpx.attr("data-submit-role", "note"),
+                    @tmpx.attr("placeholder", "Write an internal note..."),
+                  ],
+                  [],
+                ),
               ),
-            ),
-            @tmpx.unsafe_custom_element(
-              "input",
-              parts([
-                @tmpx.attr("type", "hidden"),
-                @tmpx.attr("name", "intent"),
-                @tmpx.attr("value", "note"),
-              ], []),
-            ),
-            @tmpx.button_parts(
-              parts(
-                [
-                  @tmpx.class_("btn secondary"),
-                  @tmpx.attr("type", "submit"),
-                  @tmpx.attr("data-submit-role", "note"),
-                ],
-                [@tmpx.text("Add note")],
+              @tmpx.unsafe_custom_element(
+                "input",
+                parts(
+                  [
+                    @tmpx.attr("type", "hidden"),
+                    @tmpx.attr("name", "intent"),
+                    @tmpx.attr("value", "note"),
+                  ],
+                  [],
+                ),
               ),
-            ),
-          ]),
+              @tmpx.button_parts(
+                parts(
+                  [
+                    @tmpx.class_("btn secondary"),
+                    @tmpx.attr("type", "submit"),
+                    @tmpx.attr("data-submit-role", "note"),
+                  ],
+                  [@tmpx.text("Add note")],
+                ),
+              ),
+            ],
+          ),
         ),
       ]
   }
