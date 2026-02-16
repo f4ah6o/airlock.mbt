@@ -273,6 +273,11 @@ struct AppState {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
   id_counter : Ref[Int]
+  realtime_version : Ref[Int]
+  realtime_last_ticket_id : Ref[String]
+  direct_adapter : Ref[@adapters.DirectAdapter?]
+  outbound_queue : Ref[Array[@adapters.OutboundMessage]]
+  outbound_echo_counts : Ref[Map[String, Int]]
 }
 
 ///|
@@ -316,7 +321,162 @@ fn seed_state() -> AppState {
   )
   let _ = message_repo.create(m1)
   let _ = message_repo.create(m2)
-  { ticket_repo, message_repo, id_counter }
+  {
+    ticket_repo,
+    message_repo,
+    id_counter,
+    realtime_version: { val: 0 },
+    realtime_last_ticket_id: { val: "" },
+    direct_adapter: { val: None },
+    outbound_queue: { val: [] },
+    outbound_echo_counts: { val: {} },
+  }
+}
+
+///|
+fn should_send_to_direct(platform : String) -> Bool {
+  platform == "direct4b" || platform == "direct"
+}
+
+///|
+fn outbound_echo_key(channel_id : String, text : String) -> String {
+  channel_id + "\n" + text
+}
+
+///|
+fn register_outbound_echo(
+  state : AppState,
+  channel_id : String,
+  text : String,
+) -> Unit {
+  let key = outbound_echo_key(channel_id, text)
+  let next = match state.outbound_echo_counts.val.get(key) {
+    Some(v) => v + 1
+    None => 1
+  }
+  state.outbound_echo_counts.val.set(key, next)
+}
+
+///|
+fn consume_outbound_echo(
+  state : AppState,
+  channel_id : String,
+  text : String,
+) -> Bool {
+  let key = outbound_echo_key(channel_id, text)
+  match state.outbound_echo_counts.val.get(key) {
+    Some(v) => {
+      if v <= 1 {
+        state.outbound_echo_counts.val.remove(key)
+      } else {
+        state.outbound_echo_counts.val.set(key, v - 1)
+      }
+      true
+    }
+    None => false
+  }
+}
+
+///|
+fn enqueue_direct_outbound(
+  state : AppState,
+  ticket : @shared.Ticket,
+  text : String,
+  idempotency_key : String,
+) -> Unit {
+  if !should_send_to_direct(ticket.chat_a.platform) {
+    return
+  }
+  if ticket.chat_a.dm_id == "" {
+    println("skip direct outbound: empty dm_id for ticket=\{ticket.ticket_id}")
+    return
+  }
+  let outbound = @adapters.OutboundMessage::new(
+    ticket.chat_a.dm_id,
+    text,
+    idempotency_key,
+  )
+  register_outbound_echo(state, ticket.chat_a.dm_id, text)
+  state.outbound_queue.val.push(outbound)
+}
+
+///|
+fn pop_outbound_queue(state : AppState) -> @adapters.OutboundMessage? {
+  if state.outbound_queue.val.is_empty() {
+    return None
+  }
+  let first = state.outbound_queue.val[0]
+  let remaining : Array[@adapters.OutboundMessage] = []
+  for i in 1..<state.outbound_queue.val.length() {
+    remaining.push(state.outbound_queue.val[i])
+  }
+  state.outbound_queue.val = remaining
+  Some(first)
+}
+
+///|
+async fn process_outbound_queue_once(state : AppState) -> Unit {
+  let adapter = match state.direct_adapter.val {
+    Some(a) => a
+    None => return
+  }
+  let outbound = match pop_outbound_queue(state) {
+    Some(v) => v
+    None => return
+  }
+  match adapter.send_outbound(outbound) {
+    Ok(_) => ()
+    Err(err) => {
+      println("direct outbound failed: \{err.to_string()}")
+      state.outbound_queue.val.push(outbound)
+    }
+  }
+}
+
+///|
+async fn process_outbound_queue_loop(state : AppState) -> Unit {
+  while true {
+    process_outbound_queue_once(state)
+    @async.sleep(200)
+  }
+}
+
+///|
+fn sse_event(event_name : String, data : String) -> String {
+  "event: " + event_name + "\n" + "data: " + data + "\n\n"
+}
+
+///|
+async fn send_sse_event(
+  conn : @socket.Tcp,
+  event_name : String,
+  data : String,
+) -> Unit {
+  conn.write(array_to_bytes(string_to_bytes(sse_event(event_name, data))))
+}
+
+///|
+fn notify_ticket_updated(state : AppState, ticket_id : String) -> Unit {
+  state.realtime_version.val = state.realtime_version.val + 1
+  state.realtime_last_ticket_id.val = ticket_id
+}
+
+///|
+async fn handle_sse_subscribe(state : AppState, conn : @socket.Tcp) -> Unit {
+  let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
+  conn.write(array_to_bytes(string_to_bytes(header)))
+  send_sse_event(conn, "connected", "{}")
+  let mut seen_version = state.realtime_version.val
+  while true {
+    let current_version = state.realtime_version.val
+    if current_version != seen_version {
+      seen_version = current_version
+      let ticket_id = state.realtime_last_ticket_id.val
+      let payload = "{\"ticket_id\":\"" + ticket_id + "\"}"
+      send_sse_event(conn, "ticket-updated", payload)
+    }
+    @async.sleep(200)
+  }
 }
 
 ///|
@@ -445,6 +605,12 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
   if path == "/" {
     return full_page_response(state, None)
   }
+  if path == "/events" {
+    return build_response(
+      405, "Method Not Allowed", "Use EventSource GET /events without standard response handler.",
+      "text/plain; charset=utf-8",
+    )
+  }
   if path == "/assets/mhx.js" {
     match read_asset("src/cmd/it_support_app/public/mhx.js") {
       Some(content) => return js_response(content)
@@ -476,6 +642,45 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
     return html_response(
       @web.render_ticket_partial(tickets, ticket, timeline, notes),
     )
+  }
+  if parts.length() == 3 && parts[0] == "partials" && parts[1] == "tickets" {
+    let selected_id = if parts[2] == "-" { None } else { Some(parts[2]) }
+    return html_response(
+      @web.render_left_partial(state.ticket_repo.list(), selected_id),
+    )
+  }
+  if parts.length() == 4 &&
+    parts[0] == "partials" &&
+    parts[1] == "ticket" &&
+    parts[3] == "center" {
+    let ticket_id = parts[2]
+    let ticket = match state.ticket_repo.get(ticket_id) {
+      Ok(t) => Some(t)
+      Err(_) => None
+    }
+    let timeline = match ticket {
+      None => []
+      Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
+    }
+    return html_response(@web.render_center_partial(ticket, timeline, None))
+  }
+  if parts.length() == 4 &&
+    parts[0] == "partials" &&
+    parts[1] == "ticket" &&
+    parts[3] == "right" {
+    let ticket_id = parts[2]
+    let ticket = match state.ticket_repo.get(ticket_id) {
+      Ok(t) => Some(t)
+      Err(_) => None
+    }
+    let notes = match ticket {
+      None => []
+      Some(t) =>
+        state.message_repo
+        .list_workspace_by_ticket(t.ticket_id)
+        .filter(fn(m) { m.visibility == @shared.Internal })
+    }
+    return html_response(@web.render_right_partial(ticket, notes, None))
   }
   not_found_response()
 }
@@ -567,6 +772,7 @@ fn handle_post(
             }
             let updated = @shared.Message::{ ..note_message, text, }
             let _ = state.message_repo.update(updated)
+            notify_ticket_updated(state, ticket_id)
             let notes2 = state.message_repo
               .list_workspace_by_ticket(ticket_id)
               .filter(fn(m) { m.visibility == @shared.Internal })
@@ -590,7 +796,7 @@ fn handle_post(
                 }
                 return redirect_to_ticket(ticket_id)
               }
-              Ok(_) => ()
+              Ok(_) => notify_ticket_updated(state, ticket_id)
             }
             let notes2 = state.message_repo
               .list_workspace_by_ticket(ticket_id)
@@ -667,6 +873,17 @@ fn handle_post(
           "support",
         )
         let _ = state.message_repo.create(msg)
+        match ticket {
+          Some(t) =>
+            enqueue_direct_outbound(
+              state,
+              t,
+              text,
+              "outbound:" + msg.message_id,
+            )
+          None => ()
+        }
+        notify_ticket_updated(state, ticket_id)
         let timeline2 = state.message_repo.list_public_by_ticket(ticket_id)
         if mhx_request {
           return html_response(
@@ -726,6 +943,7 @@ fn handle_post(
           "support",
         )
         let _ = state.message_repo.create(msg)
+        notify_ticket_updated(state, ticket_id)
         let notes2 = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
@@ -915,24 +1133,36 @@ fn build_ingest_context(state : AppState) -> @core.IngestContext {
 
 ///|
 fn handle_direct_incoming(
+  state : AppState,
   ingest_ctx : @core.IngestContext,
   normalized : @adapters.NormalizedMessage,
 ) -> Unit {
+  if consume_outbound_echo(state, normalized.channel_id, normalized.text) {
+    println(
+      "ignored outbound echo from direct: channel=\{normalized.channel_id}",
+    )
+    return
+  }
   match @core.ingest_incoming(ingest_ctx, normalized.to_inbound()) {
-    Ok(@core.Created(ticket_id, message_id)) =>
+    Ok(@core.Created(ticket_id, message_id)) => {
+      notify_ticket_updated(state, ticket_id)
       println(
         "ingested direct message: ticket=\{ticket_id}, message=\{message_id}",
       )
-    Ok(@core.DuplicateIgnored(ticket_id, message_id)) =>
+    }
+    Ok(@core.DuplicateIgnored(ticket_id, message_id)) => {
+      notify_ticket_updated(state, ticket_id)
       println(
         "ignored duplicated direct message: ticket=\{ticket_id}, message=\{message_id}",
       )
+    }
     Err(err) => println("failed to ingest direct message: \{err.to_string()}")
   }
 }
 
 ///|
 async fn try_start_direct_bridge(
+  state : AppState,
   ingest_ctx : @core.IngestContext,
   tasks : @async.TaskGroup[Unit],
 ) -> Unit {
@@ -954,13 +1184,15 @@ async fn try_start_direct_bridge(
     proxy_url=cfg.proxy_url,
   )
   adapter.listen_incoming(fn(normalized) {
-    handle_direct_incoming(ingest_ctx, normalized)
+    handle_direct_incoming(state, ingest_ctx, normalized)
   })
   match adapter.connect(tasks) {
-    Ok(_) =>
+    Ok(_) => {
+      state.direct_adapter.val = Some(adapter)
       println(
         "direct bridge connected (platform=\{cfg.platform}, bot_user_id=\{cfg.bot_user_id})",
       )
+    }
     Err(err) => println("direct bridge connect failed: \{err.to_string()}")
   }
 }
@@ -970,7 +1202,8 @@ async fn main {
   let state = seed_state()
   let ingest_ctx = build_ingest_context(state)
   @async.with_task_group(async fn(tasks) {
-    try_start_direct_bridge(ingest_ctx, tasks)
+    tasks.spawn_bg(() => process_outbound_queue_loop(state))
+    try_start_direct_bridge(state, ingest_ctx, tasks)
     match bind_first_available_port(8080, 50) {
       Some((server, port)) => {
         println(
@@ -989,6 +1222,11 @@ async fn main {
             }
             match decoder.decode() {
               Ok(Some(request)) => {
+                let path = path_only(request.uri)
+                if request.http_method == "GET" && path == "/events" {
+                  handle_sse_subscribe(state, conn)
+                  return
+                }
                 let response = build_response_for_request(state, request)
                 let response_bytes = @http.encode_response(response)
                 conn.write(array_to_bytes(response_bytes))

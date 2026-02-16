@@ -173,6 +173,7 @@ fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
             @tmpx.mx_post(
               "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
             ),
+            @tmpx.mx_trigger("submit prevent"),
             @tmpx.mx_target("#pane-right"),
             @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
           ],
@@ -314,6 +315,7 @@ fn center_nodes(
               @tmpx.attr("method", "post"),
               @tmpx.attr("action", "/tickets/" + t.ticket_id + "/reply"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+              @tmpx.mx_trigger("submit prevent"),
               @tmpx.mx_target("#pane-center"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
             ],
@@ -400,6 +402,7 @@ fn right_nodes(
               @tmpx.attr("method", "post"),
               @tmpx.attr("action", "/tickets/" + t.ticket_id + "/notes"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+              @tmpx.mx_trigger("submit prevent"),
               @tmpx.mx_target("#pane-right"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
             ],
@@ -462,15 +465,37 @@ pub fn render_index(
     Some(t) => Some(t.ticket_id)
     None => None
   }
+  let selected_id_segment = match selected_id {
+    Some(id) => id
+    None => "-"
+  }
+  let left_attrs : Array[@tmpx.Attr] = [
+    @tmpx.id_("pane-left"),
+    @tmpx.class_("pane"),
+    @tmpx.mx_get("/partials/tickets/" + selected_id_segment),
+    @tmpx.mx_trigger("input[target.id=='pane-left']"),
+    @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+  ]
   let center_attrs : Array[@tmpx.Attr] = [
     @tmpx.id_("pane-center"),
     @tmpx.class_("pane"),
   ]
+  let right_attrs : Array[@tmpx.Attr] = [
+    @tmpx.id_("pane-right"),
+    @tmpx.class_("pane"),
+  ]
   match selected_ticket {
     Some(t) => {
-      center_attrs.push(@tmpx.mx_get("/partials/ticket/" + t.ticket_id))
-      center_attrs.push(@tmpx.mx_trigger("every 1s"))
+      center_attrs.push(
+        @tmpx.mx_get("/partials/ticket/" + t.ticket_id + "/center"),
+      )
+      center_attrs.push(@tmpx.mx_trigger("input[target.id=='pane-center']"))
       center_attrs.push(@tmpx.mx_swap(@tmpx.MxSwap::InnerHTML))
+      right_attrs.push(
+        @tmpx.mx_get("/partials/ticket/" + t.ticket_id + "/right"),
+      )
+      right_attrs.push(@tmpx.mx_trigger("input[target.id=='pane-right']"))
+      right_attrs.push(@tmpx.mx_swap(@tmpx.MxSwap::InnerHTML))
     }
     None => ()
   }
@@ -491,7 +516,7 @@ pub fn render_index(
           @tmpx.div_parts(
             parts([@tmpx.class_("app")], [
               @tmpx.aside_parts(
-                parts([@tmpx.id_("pane-left"), @tmpx.class_("pane")], [
+                parts(left_attrs, [
                   @tmpx.h2_parts(
                     parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
                   ),
@@ -505,10 +530,7 @@ pub fn render_index(
                 ),
               ),
               @tmpx.aside_parts(
-                parts(
-                  [@tmpx.id_("pane-right"), @tmpx.class_("pane")],
-                  right_nodes(selected_ticket, notes, None),
-                ),
+                parts(right_attrs, right_nodes(selected_ticket, notes, None)),
               ),
             ]),
           ),
@@ -520,7 +542,7 @@ pub fn render_index(
             "script",
             parts([], [
               @tmpx.raw(
-                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); } document.addEventListener('keydown', function (event) { var target = event.target; if (!(target instanceof HTMLTextAreaElement)) { return; } if (target.getAttribute('data-shift-enter-send') !== 'true') { return; } if (event.key !== 'Enter' || !event.shiftKey) { return; } event.preventDefault(); var form = target.closest('form'); if (!form) { return; } if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; } form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });",
+                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); } document.addEventListener('keydown', function (event) { var target = event.target; if (!(target instanceof HTMLTextAreaElement)) { return; } if (target.getAttribute('data-shift-enter-send') !== 'true') { return; } if (event.key !== 'Enter' || !event.shiftKey) { return; } event.preventDefault(); var form = target.closest('form'); if (!form) { return; } if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; } form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }); (function () { if (typeof EventSource === 'undefined') { return; } var selectedTicketId = function () { var path = window.location.pathname || '/'; var m = path.match(/^\\/tickets\\/([^\\/]+)$/); return m ? m[1] : '-'; }; var eventSource = new EventSource('/events'); var refresh = function () { var ticketId = selectedTicketId(); var left = document.getElementById('pane-left'); if (left) { left.setAttribute('mx-get', '/partials/tickets/' + ticketId); left.dispatchEvent(new Event('input', { bubbles: true })); } var center = document.getElementById('pane-center'); if (center) { center.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/center'); center.dispatchEvent(new Event('input', { bubbles: true })); } var right = document.getElementById('pane-right'); if (right) { right.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/right'); right.dispatchEvent(new Event('input', { bubbles: true })); } }; eventSource.addEventListener('ticket-updated', refresh); eventSource.addEventListener('message', refresh); })();",
               ),
             ]),
           ),
@@ -589,4 +611,19 @@ pub fn render_right_partial(
   error : String?,
 ) -> String {
   @tmpx.render(@tmpx.fragment(right_nodes(ticket, notes, error)))
+}
+
+///|
+pub fn render_left_partial(
+  tickets : Array[@shared.Ticket],
+  selected_id : String?,
+) -> String {
+  @tmpx.render(
+    @tmpx.fragment([
+      @tmpx.h2_parts(
+        parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
+      ),
+      ticket_list(tickets, selected_id),
+    ]),
+  )
 }
