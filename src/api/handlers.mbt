@@ -626,7 +626,7 @@ pub fn message_to_json(msg : @shared.Message) -> String {
       "{\"passed\":\{r.passed.to_string()},\"warnings\":[\{array_to_json_strings(r.warnings)}]}"
     None => "null"
   }
-  "{\"message_id\":\"\{msg.message_id}\",\"ticket_id\":\"\{msg.ticket_id}\",\"text\":\"\{escape_json_string(msg.text)}\",\"visibility\":\"\{msg.visibility.to_string()}\",\"origin\":\"\{msg.origin.to_string()}\",\"is_draft\":\{msg.is_draft.to_string()},\"draft_status\":\"\{msg.draft_status.to_string()}\",\"ai_check_result\":\{ai_check},\"sender_id\":\"\{msg.sender_id}\",\"timestamp\":\"\{msg.timestamp}\",\"published_at\":\"\{msg.published_at}\"}"
+  "{\"message_id\":\"\{msg.message_id}\",\"ticket_id\":\"\{msg.ticket_id}\",\"text\":\"\{escape_json_string(msg.text)}\",\"visibility\":\"\{msg.visibility.to_string()}\",\"origin\":\"\{msg.origin.to_string()}\",\"is_draft\":\{msg.is_draft.to_string()},\"draft_status\":\"\{msg.draft_status.to_string()}\",\"ai_check_result\":\{ai_check},\"sender_id\":\"\{msg.sender_id}\",\"sender_name\":\"\{escape_json_string(msg.sender_name)}\",\"timestamp\":\"\{msg.timestamp}\",\"published_at\":\"\{msg.published_at}\"}"
 }
 
 ///|

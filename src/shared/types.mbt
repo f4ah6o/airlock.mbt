@@ -260,6 +260,7 @@ pub(all) struct Message {
 
   // Metadata
   sender_id : String
+  sender_name : String
   timestamp : String
 } derive(Show, Eq)
 
@@ -287,6 +288,7 @@ pub fn Message::new(
     idempotency_key: "",
     published_at: "",
     sender_id,
+    sender_name: sender_id,
     timestamp: "",
   }
 }
@@ -314,6 +316,7 @@ pub fn Message::new_draft(
     idempotency_key,
     published_at: "",
     sender_id,
+    sender_name: sender_id,
     timestamp: "",
   }
 }
@@ -340,6 +343,7 @@ pub fn Message::new_note(
     idempotency_key: "",
     published_at: "",
     sender_id,
+    sender_name: sender_id,
     timestamp: "",
   }
 }

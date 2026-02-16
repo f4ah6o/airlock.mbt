@@ -4,10 +4,14 @@ fn app_style() -> String {
     "* { box-sizing: border-box; }", "html, body { margin: 0; padding: 0; height: 100%; font-family: 'Space Grotesk', 'Noto Sans JP', sans-serif; background: #f8fafc; }",
     ".app { display: grid; grid-template-columns: 280px 1fr 360px; gap: 16px; height: 100%; padding: 16px; }",
     ".pane { background: #fff; border: 1px solid rgba(15, 23, 42, 0.08); border-radius: 12px; padding: 12px; min-height: 0; display: flex; flex-direction: column; }",
-    ".pane-title { font-size: 14px; font-weight: 600; margin: 0 0 8px 0; color: #0f172a; }",
+    ".pane-title { font-size: 14px; font-weight: 600; margin: 0; color: #0f172a; }",
+    ".pane-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }",
     ".ticket-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }",
     ".ticket-item { border: 1px solid transparent; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; display: block; text-decoration: none; color: inherit; }",
     ".ticket-item.is-active { border-color: #2563eb; background: #eff6ff; }", ".chat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; overflow: auto; flex: 1; }",
+    ".ticket-edit-panel { display: none; }", ".ticket-edit-panel.is-open { display: block; }",
+    ".ticket-view-panel.is-hidden { display: none; }", ".ticket-edit-item { display: flex; gap: 8px; align-items: flex-start; }",
+    ".ticket-edit-actions { display: flex; gap: 8px; margin: 8px 0; }", ".gear-btn { background: #e2e8f0; color: #0f172a; border: none; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }",
     ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; max-width: 88%; }",
     ".chat-item.chat-a { background: #eef2ff; margin-right: auto; border: 1px solid #c7d2fe; }",
     ".chat-item.console { background: #ecfeff; margin-left: auto; border: 1px solid #a5f3fc; }",
@@ -30,6 +34,15 @@ fn message_origin_class(origin : @shared.Origin) -> String {
     @shared.ChatA => "chat-a"
     @shared.Console => "console"
     @shared.System => "system"
+  }
+}
+
+///|
+fn sender_label(message : @shared.Message) -> String {
+  if message.sender_name == "" {
+    message.sender_id
+  } else {
+    message.sender_name
   }
 }
 
@@ -115,7 +128,38 @@ fn render_ticket_item(
 }
 
 ///|
-fn ticket_list(
+fn render_ticket_edit_item(ticket : @shared.Ticket) -> @tmpx.Node {
+  @tmpx.li_parts(
+    parts([@tmpx.class_("ticket-edit-item")], [
+      @tmpx.unsafe_custom_element(
+        "input",
+        parts(
+          [
+            @tmpx.attr("type", "checkbox"),
+            @tmpx.attr("name", "ticket_select"),
+            @tmpx.attr("value", ticket.ticket_id),
+          ],
+          [],
+        ),
+      ),
+      @tmpx.div_parts(
+        parts([], [
+          @tmpx.strong_parts(parts([], [@tmpx.text(ticket.subject)])),
+          @tmpx.p_parts(
+            parts([], [
+              @tmpx.text(
+                "#" + ticket.ticket_id + " - " + ticket.status.to_string(),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    ]),
+  )
+}
+
+///|
+fn ticket_list_view(
   tickets : Array[@shared.Ticket],
   selected_id : String?,
 ) -> @tmpx.Node {
@@ -128,13 +172,118 @@ fn ticket_list(
 }
 
 ///|
+fn ticket_list_edit(tickets : Array[@shared.Ticket]) -> @tmpx.Node {
+  @tmpx.ul_parts(
+    parts(
+      [@tmpx.class_("ticket-list")],
+      tickets.map(fn(ticket) { render_ticket_edit_item(ticket) }),
+    ),
+  )
+}
+
+///|
+fn ticket_left_content(
+  tickets : Array[@shared.Ticket],
+  selected_id : String?,
+) -> Array[@tmpx.Node] {
+  let selected_id_segment = match selected_id {
+    Some(id) => id
+    None => "-"
+  }
+  [
+    @tmpx.div_parts(
+      parts([@tmpx.class_("pane-title-row")], [
+        @tmpx.h2_parts(
+          parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
+        ),
+        @tmpx.button_parts(
+          parts(
+            [
+              @tmpx.class_("gear-btn"),
+              @tmpx.attr("type", "button"),
+              @tmpx.attr("onclick", "toggleTicketEditMode(true)"),
+            ],
+            [@tmpx.raw("&#9881;")],
+          ),
+        ),
+      ]),
+    ),
+    @tmpx.div_parts(
+      parts(
+        [@tmpx.id_("ticket-view-panel"), @tmpx.class_("ticket-view-panel")],
+        [ticket_list_view(tickets, selected_id)],
+      ),
+    ),
+    @tmpx.form_parts(
+      parts(
+        [
+          @tmpx.id_("ticket-edit-panel"),
+          @tmpx.class_("ticket-edit-panel"),
+          @tmpx.attr("method", "post"),
+          @tmpx.attr("action", "/tickets/close"),
+          @tmpx.mx_post("/tickets/close"),
+          @tmpx.mx_trigger("submit prevent"),
+          @tmpx.mx_target("#pane-left"),
+          @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+          @tmpx.attr("onsubmit", "return prepareTicketClose(this)"),
+        ],
+        [
+          @tmpx.div_parts(
+            parts([@tmpx.class_("ticket-edit-actions")], [
+              @tmpx.button_parts(
+                parts([@tmpx.class_("btn"), @tmpx.attr("type", "submit")], [
+                  @tmpx.text("Confirm close"),
+                ]),
+              ),
+              @tmpx.button_parts(
+                parts(
+                  [
+                    @tmpx.class_("btn secondary"),
+                    @tmpx.attr("type", "button"),
+                    @tmpx.attr("onclick", "toggleTicketEditMode(false)"),
+                  ],
+                  [@tmpx.text("Cancel")],
+                ),
+              ),
+            ]),
+          ),
+          @tmpx.unsafe_custom_element(
+            "input",
+            parts(
+              [
+                @tmpx.attr("type", "hidden"),
+                @tmpx.attr("name", "ticket_ids_csv"),
+                @tmpx.attr("value", ""),
+              ],
+              [],
+            ),
+          ),
+          @tmpx.unsafe_custom_element(
+            "input",
+            parts(
+              [
+                @tmpx.attr("type", "hidden"),
+                @tmpx.attr("name", "selected_ticket_id"),
+                @tmpx.attr("value", selected_id_segment),
+              ],
+              [],
+            ),
+          ),
+          ticket_list_edit(tickets),
+        ],
+      ),
+    ),
+  ]
+}
+
+///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
   let classes = ["chat-item", message_origin_class(message.origin)]
   @tmpx.li_parts(
     parts([@tmpx.class_list(classes)], [
       @tmpx.div_parts(
         parts([@tmpx.class_("chat-item__meta")], [
-          @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
+          @tmpx.text(sender_label(message) + " - " + message.origin.to_string()),
         ]),
       ),
       @tmpx.div_parts(
@@ -147,20 +296,26 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
 }
 
 ///|
-fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
+fn note_item(
+  ticket_id : String,
+  message : @shared.Message,
+  is_closed_ticket : Bool,
+) -> @tmpx.Node {
   let classes = ["chat-item", message_origin_class(message.origin)]
-  @tmpx.li_parts(
-    parts([@tmpx.class_list(classes)], [
-      @tmpx.div_parts(
-        parts([@tmpx.class_("chat-item__meta")], [
-          @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
-        ]),
-      ),
-      @tmpx.div_parts(
-        parts([@tmpx.class_("chat-item__text")], [
-          @tmpx.raw(escape_html_text(message.text)),
-        ]),
-      ),
+  let nodes : Array[@tmpx.Node] = [
+    @tmpx.div_parts(
+      parts([@tmpx.class_("chat-item__meta")], [
+        @tmpx.text(sender_label(message) + " - " + message.origin.to_string()),
+      ]),
+    ),
+    @tmpx.div_parts(
+      parts([@tmpx.class_("chat-item__text")], [
+        @tmpx.raw(escape_html_text(message.text)),
+      ]),
+    ),
+  ]
+  if !is_closed_ticket {
+    nodes.push(
       @tmpx.form_parts(
         parts(
           [
@@ -214,6 +369,8 @@ fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
           ],
         ),
       ),
+    )
+    nodes.push(
       @tmpx.form_parts(
         parts(
           [
@@ -248,8 +405,9 @@ fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
           ],
         ),
       ),
-    ]),
-  )
+    )
+  }
+  @tmpx.li_parts(parts([@tmpx.class_list(classes)], nodes))
 }
 
 ///|
@@ -265,6 +423,7 @@ fn message_list(messages : Array[@shared.Message]) -> @tmpx.Node {
 ///|
 fn note_message_list(
   ticket_id : String,
+  is_closed_ticket : Bool,
   messages : Array[@shared.Message],
 ) -> @tmpx.Node {
   if messages.is_empty() {
@@ -275,7 +434,9 @@ fn note_message_list(
   @tmpx.ul_parts(
     parts(
       [@tmpx.class_("chat-list")],
-      messages.map(fn(message) { note_item(ticket_id, message) }),
+      messages.map(fn(message) {
+        note_item(ticket_id, message, is_closed_ticket)
+      }),
     ),
   )
 }
@@ -306,63 +467,71 @@ fn center_nodes(
           ]),
         ),
         message_list(timeline),
-        @tmpx.form_parts(
-          parts(
-            [
-              @tmpx.class_("form"),
-              @tmpx.id_("reply-form-" + t.ticket_id),
-              @tmpx.attr("data-form-kind", "reply"),
-              @tmpx.attr("method", "post"),
-              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/reply"),
-              @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
-              @tmpx.mx_trigger("submit prevent"),
-              @tmpx.mx_target("#pane-center"),
-              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-            ],
-            [
-              match error {
-                Some(msg) =>
-                  @tmpx.div_parts(
-                    parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
-                  )
-                None => @tmpx.fragment([])
-              },
-              @tmpx.textarea_parts(
-                parts(
-                  [
-                    @tmpx.class_("input"),
-                    @tmpx.attr("name", "reply_text"),
-                    @tmpx.attr("data-shift-enter-send", "true"),
-                    @tmpx.attr("data-submit-role", "reply"),
-                    @tmpx.attr("placeholder", "Write a public reply..."),
-                  ],
-                  [],
+        if t.status == @shared.Closed {
+          @tmpx.div_parts(
+            parts([@tmpx.class_("placeholder")], [
+              @tmpx.text("This ticket is closed. Send reply is disabled."),
+            ]),
+          )
+        } else {
+          @tmpx.form_parts(
+            parts(
+              [
+                @tmpx.class_("form"),
+                @tmpx.id_("reply-form-" + t.ticket_id),
+                @tmpx.attr("data-form-kind", "reply"),
+                @tmpx.attr("method", "post"),
+                @tmpx.attr("action", "/tickets/" + t.ticket_id + "/reply"),
+                @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
+                @tmpx.mx_trigger("submit prevent"),
+                @tmpx.mx_target("#pane-center"),
+                @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+              ],
+              [
+                match error {
+                  Some(msg) =>
+                    @tmpx.div_parts(
+                      parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
+                    )
+                  None => @tmpx.fragment([])
+                },
+                @tmpx.textarea_parts(
+                  parts(
+                    [
+                      @tmpx.class_("input"),
+                      @tmpx.attr("name", "reply_text"),
+                      @tmpx.attr("data-shift-enter-send", "true"),
+                      @tmpx.attr("data-submit-role", "reply"),
+                      @tmpx.attr("placeholder", "Write a public reply..."),
+                    ],
+                    [],
+                  ),
                 ),
-              ),
-              @tmpx.unsafe_custom_element(
-                "input",
-                parts(
-                  [
-                    @tmpx.attr("type", "hidden"),
-                    @tmpx.attr("name", "intent"),
-                    @tmpx.attr("value", "reply"),
-                  ],
-                  [],
+                @tmpx.unsafe_custom_element(
+                  "input",
+                  parts(
+                    [
+                      @tmpx.attr("type", "hidden"),
+                      @tmpx.attr("name", "intent"),
+                      @tmpx.attr("value", "reply"),
+                    ],
+                    [],
+                  ),
                 ),
-              ),
-              @tmpx.button_parts(
-                parts(
-                  [
-                    @tmpx.class_("btn"),
-                    @tmpx.attr("type", "submit"),
-                    @tmpx.attr("data-submit-role", "reply"),
-                  ],
-                  [@tmpx.text("Send reply")],
+                @tmpx.button_parts(
+                  parts(
+                    [
+                      @tmpx.class_("btn"),
+                      @tmpx.attr("type", "submit"),
+                      @tmpx.attr("data-submit-role", "reply"),
+                    ],
+                    [@tmpx.text("Send reply")],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          )
+        },
       ]
   }
 }
@@ -392,66 +561,110 @@ fn right_nodes(
             @tmpx.text("Notes - " + t.subject),
           ]),
         ),
-        note_message_list(t.ticket_id, notes),
-        @tmpx.form_parts(
-          parts(
-            [
-              @tmpx.class_("form"),
-              @tmpx.id_("note-form-" + t.ticket_id),
-              @tmpx.attr("data-form-kind", "note"),
-              @tmpx.attr("method", "post"),
-              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/notes"),
-              @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
-              @tmpx.mx_trigger("submit prevent"),
-              @tmpx.mx_target("#pane-right"),
-              @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
-            ],
-            [
-              match error {
-                Some(msg) =>
-                  @tmpx.div_parts(
-                    parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
-                  )
-                None => @tmpx.fragment([])
-              },
-              @tmpx.textarea_parts(
-                parts(
-                  [
-                    @tmpx.class_("input"),
-                    @tmpx.attr("name", "note_text"),
-                    @tmpx.attr("data-shift-enter-send", "true"),
-                    @tmpx.attr("data-submit-role", "note"),
-                    @tmpx.attr("placeholder", "Write an internal note..."),
-                  ],
-                  [],
+        note_message_list(t.ticket_id, t.status == @shared.Closed, notes),
+        if t.status == @shared.Closed {
+          @tmpx.div_parts(
+            parts([@tmpx.class_("placeholder")], [
+              @tmpx.text("This ticket is closed. Add note is disabled."),
+            ]),
+          )
+        } else {
+          @tmpx.form_parts(
+            parts(
+              [
+                @tmpx.class_("form"),
+                @tmpx.id_("note-form-" + t.ticket_id),
+                @tmpx.attr("data-form-kind", "note"),
+                @tmpx.attr("method", "post"),
+                @tmpx.attr("action", "/tickets/" + t.ticket_id + "/notes"),
+                @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
+                @tmpx.mx_trigger("submit prevent"),
+                @tmpx.mx_target("#pane-right"),
+                @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+              ],
+              [
+                match error {
+                  Some(msg) =>
+                    @tmpx.div_parts(
+                      parts([@tmpx.class_("form-error")], [@tmpx.text(msg)]),
+                    )
+                  None => @tmpx.fragment([])
+                },
+                @tmpx.textarea_parts(
+                  parts(
+                    [
+                      @tmpx.class_("input"),
+                      @tmpx.attr("name", "note_text"),
+                      @tmpx.attr("data-shift-enter-send", "true"),
+                      @tmpx.attr("data-submit-role", "note"),
+                      @tmpx.attr("placeholder", "Write an internal note..."),
+                    ],
+                    [],
+                  ),
                 ),
-              ),
-              @tmpx.unsafe_custom_element(
-                "input",
-                parts(
-                  [
-                    @tmpx.attr("type", "hidden"),
-                    @tmpx.attr("name", "intent"),
-                    @tmpx.attr("value", "note"),
-                  ],
-                  [],
+                @tmpx.unsafe_custom_element(
+                  "input",
+                  parts(
+                    [
+                      @tmpx.attr("type", "hidden"),
+                      @tmpx.attr("name", "intent"),
+                      @tmpx.attr("value", "note"),
+                    ],
+                    [],
+                  ),
                 ),
-              ),
-              @tmpx.button_parts(
-                parts(
-                  [
-                    @tmpx.class_("btn secondary"),
-                    @tmpx.attr("type", "submit"),
-                    @tmpx.attr("data-submit-role", "note"),
-                  ],
-                  [@tmpx.text("Add note")],
+                @tmpx.button_parts(
+                  parts(
+                    [
+                      @tmpx.class_("btn secondary"),
+                      @tmpx.attr("type", "submit"),
+                      @tmpx.attr("data-submit-role", "note"),
+                    ],
+                    [@tmpx.text("Add note")],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          )
+        },
       ]
   }
+}
+
+///|
+fn app_script() -> String {
+  [
+    "if (typeof mhx !== 'undefined') {", "  mhx.init_mhx();", "  mhx.process(document.body);",
+    "}", "function selectedTicketId() {", "  var path = window.location.pathname || '/';",
+    "  var m = path.match(/^\\/tickets\\/([^\\/]+)$/);", "  return m ? m[1] : '-';",
+    "}", "window.toggleTicketEditMode = function (enabled) {", "  var view = document.getElementById('ticket-view-panel');",
+    "  var edit = document.getElementById('ticket-edit-panel');", "  if (!view || !edit) { return; }",
+    "  if (enabled) {", "    view.classList.add('is-hidden');", "    edit.classList.add('is-open');",
+    "  } else {", "    view.classList.remove('is-hidden');", "    edit.classList.remove('is-open');",
+    "  }", "};", "window.prepareTicketClose = function (form) {", "  var checks = form.querySelectorAll('input[name=\"ticket_select\"]:checked');",
+    "  var ids = [];", "  for (var i = 0; i < checks.length; i += 1) {", "    ids.push(checks[i].value);",
+    "  }", "  var csv = form.querySelector('input[name=\"ticket_ids_csv\"]');", "  if (csv) { csv.value = ids.join(','); }",
+    "  var selected = form.querySelector('input[name=\"selected_ticket_id\"]');",
+    "  if (selected) { selected.value = selectedTicketId(); }", "  return true;",
+    "};", "document.addEventListener('keydown', function (event) {", "  var target = event.target;",
+    "  if (!(target instanceof HTMLTextAreaElement)) { return; }", "  if (target.getAttribute('data-shift-enter-send') !== 'true') { return; }",
+    "  if (event.key !== 'Enter' || !event.shiftKey) { return; }", "  event.preventDefault();",
+    "  var form = target.closest('form');", "  if (!form) { return; }", "  if (typeof form.requestSubmit === 'function') {",
+    "    form.requestSubmit();", "    return;", "  }", "  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));",
+    "});", "(function () {", "  if (typeof EventSource === 'undefined') { return; }",
+    "  var eventSource = new EventSource('/events');", "  var refresh = function () {",
+    "    var ticketId = selectedTicketId();", "    var left = document.getElementById('pane-left');",
+    "    if (left) {", "      left.setAttribute('mx-get', '/partials/tickets/' + ticketId);",
+    "      left.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
+    "    var center = document.getElementById('pane-center');", "    if (center) {",
+    "      center.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/center');",
+    "      center.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
+    "    var right = document.getElementById('pane-right');", "    if (right) {",
+    "      right.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/right');",
+    "      right.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
+    "  };", "  eventSource.addEventListener('ticket-updated', refresh);", "  eventSource.addEventListener('message', refresh);",
+    "})();",
+  ].join("\n")
 }
 
 ///|
@@ -516,12 +729,7 @@ pub fn render_index(
           @tmpx.div_parts(
             parts([@tmpx.class_("app")], [
               @tmpx.aside_parts(
-                parts(left_attrs, [
-                  @tmpx.h2_parts(
-                    parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
-                  ),
-                  ticket_list(tickets, selected_id),
-                ]),
+                parts(left_attrs, ticket_left_content(tickets, selected_id)),
               ),
               @tmpx.main_parts(
                 parts(
@@ -540,11 +748,7 @@ pub fn render_index(
           ),
           @tmpx.unsafe_custom_element(
             "script",
-            parts([], [
-              @tmpx.raw(
-                "if (typeof mhx !== 'undefined') { mhx.init_mhx(); mhx.process(document.body); } document.addEventListener('keydown', function (event) { var target = event.target; if (!(target instanceof HTMLTextAreaElement)) { return; } if (target.getAttribute('data-shift-enter-send') !== 'true') { return; } if (event.key !== 'Enter' || !event.shiftKey) { return; } event.preventDefault(); var form = target.closest('form'); if (!form) { return; } if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; } form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }); (function () { if (typeof EventSource === 'undefined') { return; } var selectedTicketId = function () { var path = window.location.pathname || '/'; var m = path.match(/^\\/tickets\\/([^\\/]+)$/); return m ? m[1] : '-'; }; var eventSource = new EventSource('/events'); var refresh = function () { var ticketId = selectedTicketId(); var left = document.getElementById('pane-left'); if (left) { left.setAttribute('mx-get', '/partials/tickets/' + ticketId); left.dispatchEvent(new Event('input', { bubbles: true })); } var center = document.getElementById('pane-center'); if (center) { center.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/center'); center.dispatchEvent(new Event('input', { bubbles: true })); } var right = document.getElementById('pane-right'); if (right) { right.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/right'); right.dispatchEvent(new Event('input', { bubbles: true })); } }; eventSource.addEventListener('ticket-updated', refresh); eventSource.addEventListener('message', refresh); })();",
-              ),
-            ]),
+            parts([], [@tmpx.raw(app_script())]),
           ),
         ]),
       ),
@@ -571,12 +775,7 @@ pub fn render_ticket_partial(
         @tmpx.class_("pane"),
         @tmpx.attr("mx-swap-oob", @tmpx.MxSwap::InnerHTML.to_string()),
       ],
-      [
-        @tmpx.h2_parts(
-          parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
-        ),
-        ticket_list(tickets, selected_id),
-      ],
+      ticket_left_content(tickets, selected_id),
     ),
   )
   let right_oob = @tmpx.div_parts(
@@ -618,12 +817,5 @@ pub fn render_left_partial(
   tickets : Array[@shared.Ticket],
   selected_id : String?,
 ) -> String {
-  @tmpx.render(
-    @tmpx.fragment([
-      @tmpx.h2_parts(
-        parts([@tmpx.class_("pane-title")], [@tmpx.text("Tickets")]),
-      ),
-      ticket_list(tickets, selected_id),
-    ]),
-  )
+  @tmpx.render(@tmpx.fragment(ticket_left_content(tickets, selected_id)))
 }

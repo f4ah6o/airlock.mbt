@@ -278,6 +278,8 @@ struct AppState {
   direct_adapter : Ref[@adapters.DirectAdapter?]
   outbound_queue : Ref[Array[@adapters.OutboundMessage]]
   outbound_echo_counts : Ref[Map[String, Int]]
+  direct_user_name_cache : Ref[Map[String, String]]
+  direct_user_names_loaded : Ref[Bool]
 }
 
 ///|
@@ -330,6 +332,8 @@ fn seed_state() -> AppState {
     direct_adapter: { val: None },
     outbound_queue: { val: [] },
     outbound_echo_counts: { val: {} },
+    direct_user_name_cache: { val: {} },
+    direct_user_names_loaded: { val: false },
   }
 }
 
@@ -527,6 +531,32 @@ fn redirect_to_ticket(ticket_id : String) -> @http.Response {
 }
 
 ///|
+fn closed_ticket_response(
+  mhx_request : Bool,
+  pane : String,
+  ticket : @shared.Ticket?,
+  timeline : Array[@shared.Message],
+  notes : Array[@shared.Message],
+) -> @http.Response {
+  let msg = "Ticket is closed. New replies/notes are not allowed."
+  if mhx_request {
+    if pane == "center" {
+      return html_error_response(
+        409,
+        "Conflict",
+        @web.render_center_partial(ticket, timeline, Some(msg)),
+      )
+    }
+    return html_error_response(
+      409,
+      "Conflict",
+      @web.render_right_partial(ticket, notes, Some(msg)),
+    )
+  }
+  build_response(409, "Conflict", msg, "text/plain; charset=utf-8")
+}
+
+///|
 fn read_asset(path : String) -> String? {
   if !@fs.path_exists(path) {
     return None
@@ -561,15 +591,79 @@ fn ascii_eq_ignore_case(a : String, b : String) -> Bool {
 }
 
 ///|
+fn ticket_bucket(status : @shared.TicketStatus) -> Int {
+  match status {
+    @shared.Open => 0
+    @shared.Pending => 1
+    @shared.Closed => 2
+  }
+}
+
+///|
+fn subject_from_text(text : String) -> String {
+  if is_blank_text(text) {
+    return "Inbound message"
+  }
+  let sb = StringBuilder::new(size_hint=text.length())
+  for c in text {
+    if c == '\n' || c == '\r' {
+      break
+    }
+    sb.write_char(c)
+  }
+  let out = sb.to_string().trim().to_string()
+  if out == "" {
+    "Inbound message"
+  } else {
+    out
+  }
+}
+
+///|
+fn ticket_subject_for_view(state : AppState, ticket : @shared.Ticket) -> String {
+  let mut latest : String? = None
+  for message in state.message_repo.list_public_by_ticket(ticket.ticket_id) {
+    if message.origin == @shared.ChatA && !is_blank_text(message.text) {
+      latest = Some(message.text)
+    }
+  }
+  match latest {
+    Some(text) => subject_from_text(text)
+    None => ticket.subject
+  }
+}
+
+///|
+fn ticket_for_view(state : AppState, ticket : @shared.Ticket) -> @shared.Ticket {
+  @shared.Ticket::{ ..ticket, subject: ticket_subject_for_view(state, ticket) }
+}
+
+///|
+fn ticket_view_list(state : AppState) -> Array[@shared.Ticket] {
+  let buckets : Array[Array[@shared.Ticket]] = [[], [], []]
+  for raw_ticket in state.ticket_repo.list() {
+    let ticket = ticket_for_view(state, raw_ticket)
+    buckets[ticket_bucket(ticket.status)].push(ticket)
+  }
+  let merged : Array[@shared.Ticket] = []
+  for bucket in buckets {
+    for ticket in bucket {
+      merged.push(ticket)
+    }
+  }
+  merged
+}
+
+///|
 fn full_page_response(
   state : AppState,
   preferred_ticket_id : String?,
 ) -> @http.Response {
-  let tickets = state.ticket_repo.list()
+  let tickets = ticket_view_list(state)
   let selected = match preferred_ticket_id {
     Some(ticket_id) =>
       match state.ticket_repo.get(ticket_id) {
-        Ok(t) => Some(t)
+        Ok(t) => Some(ticket_for_view(state, t))
         Err(_) => if tickets.is_empty() { None } else { Some(tickets[0]) }
       }
     None => if tickets.is_empty() { None } else { Some(tickets[0]) }
@@ -589,6 +683,62 @@ fn full_page_response(
 }
 
 ///|
+fn merge_direct_user_name_cache(
+  state : AppState,
+  names : Array[(String, String)],
+) -> Unit {
+  for entry in names {
+    let (user_id, name) = entry
+    if user_id != "" && name != "" {
+      state.direct_user_name_cache.val.set(user_id, name)
+    }
+  }
+}
+
+///|
+async fn try_load_direct_user_names_once(state : AppState) -> Unit {
+  if state.direct_user_names_loaded.val {
+    return
+  }
+  let adapter = match state.direct_adapter.val {
+    Some(a) => a
+    None => return
+  }
+  state.direct_user_names_loaded.val = true
+  match adapter.fetch_known_user_names() {
+    Ok(names) => merge_direct_user_name_cache(state, names)
+    Err(err) => println("direct user name fetch failed: \{err.to_string()}")
+  }
+}
+
+///|
+fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
+  if state.direct_user_name_cache.val.is_empty() {
+    return
+  }
+  let messages = state.message_repo.list_by_ticket(ticket_id)
+  for message in messages {
+    match state.direct_user_name_cache.val.get(message.sender_id) {
+      Some(name) =>
+        if name != "" && message.sender_name != name {
+          let updated = @shared.Message::{ ..message, sender_name: name }
+          let _ = state.message_repo.update(updated)
+        }
+      None => ()
+    }
+  }
+}
+
+///|
+async fn ensure_ticket_open_context(
+  state : AppState,
+  ticket_id : String,
+) -> Unit {
+  try_load_direct_user_names_once(state)
+  fill_sender_names_from_cache(state, ticket_id)
+}
+
+///|
 fn is_mhx_request(request : @http.Request) -> Bool {
   for header in request.headers {
     let (name, value) = header
@@ -601,7 +751,7 @@ fn is_mhx_request(request : @http.Request) -> Bool {
 }
 
 ///|
-fn handle_get(state : AppState, path : String) -> @http.Response {
+async fn handle_get(state : AppState, path : String) -> @http.Response {
   if path == "/" {
     return full_page_response(state, None)
   }
@@ -619,13 +769,15 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
   }
   let parts = split_path(path)
   if parts.length() == 2 && parts[0] == "tickets" {
+    ensure_ticket_open_context(state, parts[1])
     return full_page_response(state, Some(parts[1]))
   }
   if parts.length() == 3 && parts[0] == "partials" && parts[1] == "ticket" {
     let ticket_id = parts[2]
-    let tickets = state.ticket_repo.list()
+    ensure_ticket_open_context(state, ticket_id)
+    let tickets = ticket_view_list(state)
     let ticket = match state.ticket_repo.get(ticket_id) {
-      Ok(t) => Some(t)
+      Ok(t) => Some(ticket_for_view(state, t))
       Err(_) => None
     }
     let timeline = match ticket {
@@ -646,7 +798,7 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
   if parts.length() == 3 && parts[0] == "partials" && parts[1] == "tickets" {
     let selected_id = if parts[2] == "-" { None } else { Some(parts[2]) }
     return html_response(
-      @web.render_left_partial(state.ticket_repo.list(), selected_id),
+      @web.render_left_partial(ticket_view_list(state), selected_id),
     )
   }
   if parts.length() == 4 &&
@@ -654,8 +806,9 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
     parts[1] == "ticket" &&
     parts[3] == "center" {
     let ticket_id = parts[2]
+    ensure_ticket_open_context(state, ticket_id)
     let ticket = match state.ticket_repo.get(ticket_id) {
-      Ok(t) => Some(t)
+      Ok(t) => Some(ticket_for_view(state, t))
       Err(_) => None
     }
     let timeline = match ticket {
@@ -669,8 +822,9 @@ fn handle_get(state : AppState, path : String) -> @http.Response {
     parts[1] == "ticket" &&
     parts[3] == "right" {
     let ticket_id = parts[2]
+    ensure_ticket_open_context(state, ticket_id)
     let ticket = match state.ticket_repo.get(ticket_id) {
-      Ok(t) => Some(t)
+      Ok(t) => Some(ticket_for_view(state, t))
       Err(_) => None
     }
     let notes = match ticket {
@@ -693,6 +847,50 @@ fn handle_post(
   mhx_request : Bool,
 ) -> @http.Response {
   let parts = split_path(path)
+  if parts.length() == 2 && parts[0] == "tickets" && parts[1] == "close" {
+    let form = parse_form(body_to_string(body))
+    let selected_ticket_id = match form.get("selected_ticket_id") {
+      Some(v) => if v == "-" { None } else { Some(v) }
+      None => None
+    }
+    let ticket_ids_csv = match form.get("ticket_ids_csv") {
+      Some(v) => v
+      None => ""
+    }
+    let now = @env.now().to_string()
+    for id_view in ticket_ids_csv.split(",") {
+      let ticket_id = id_view.to_string().trim().to_string()
+      if ticket_id == "" {
+        continue
+      }
+      match state.ticket_repo.get(ticket_id) {
+        Ok(ticket) => {
+          if ticket.status == @shared.Closed {
+            continue
+          }
+          let updated = @shared.Ticket::{
+            ..ticket,
+            status: @shared.Closed,
+            updated_at: now,
+          }
+          match state.ticket_repo.update(updated) {
+            Ok(_) => notify_ticket_updated(state, ticket_id)
+            Err(_) => ()
+          }
+        }
+        Err(_) => ()
+      }
+    }
+    if mhx_request {
+      return html_response(
+        @web.render_left_partial(ticket_view_list(state), selected_ticket_id),
+      )
+    }
+    match selected_ticket_id {
+      Some(ticket_id) => return redirect_to_ticket(ticket_id)
+      None => return full_page_response(state, None)
+    }
+  }
   if parts.length() == 5 && parts[0] == "tickets" && parts[2] == "notes" {
     let ticket_id = parts[1]
     let message_id = parts[3]
@@ -709,6 +907,13 @@ fn handle_post(
     let notes = state.message_repo
       .list_workspace_by_ticket(ticket_id)
       .filter(fn(m) { m.visibility == @shared.Internal })
+    let is_closed_ticket = match ticket {
+      Some(t) => t.status == @shared.Closed
+      None => false
+    }
+    if is_closed_ticket {
+      return closed_ticket_response(mhx_request, "right", ticket, [], notes)
+    }
     if intent == "reply" {
       if mhx_request {
         return html_error_response(
@@ -832,6 +1037,19 @@ fn handle_post(
           Err(_) => None
         }
         let timeline = state.message_repo.list_public_by_ticket(ticket_id)
+        let is_closed_ticket = match ticket {
+          Some(t) => t.status == @shared.Closed
+          None => false
+        }
+        if is_closed_ticket {
+          return closed_ticket_response(
+            mhx_request,
+            "center",
+            ticket,
+            timeline,
+            [],
+          )
+        }
         if intent == "note" {
           if mhx_request {
             return html_error_response(
@@ -872,7 +1090,10 @@ fn handle_post(
           @shared.Console,
           "support",
         )
-        let _ = state.message_repo.create(msg)
+        let _ = state.message_repo.create(@shared.Message::{
+          ..msg,
+          sender_name: "Support",
+        })
         match ticket {
           Some(t) =>
             enqueue_direct_outbound(
@@ -904,6 +1125,13 @@ fn handle_post(
         let notes = state.message_repo
           .list_workspace_by_ticket(ticket_id)
           .filter(fn(m) { m.visibility == @shared.Internal })
+        let is_closed_ticket = match ticket {
+          Some(t) => t.status == @shared.Closed
+          None => false
+        }
+        if is_closed_ticket {
+          return closed_ticket_response(mhx_request, "right", ticket, [], notes)
+        }
         if intent == "reply" {
           if mhx_request {
             return html_error_response(
@@ -942,7 +1170,10 @@ fn handle_post(
           text,
           "support",
         )
-        let _ = state.message_repo.create(msg)
+        let _ = state.message_repo.create(@shared.Message::{
+          ..msg,
+          sender_name: "Support",
+        })
         notify_ticket_updated(state, ticket_id)
         let notes2 = state.message_repo
           .list_workspace_by_ticket(ticket_id)
@@ -959,7 +1190,7 @@ fn handle_post(
 }
 
 ///|
-fn build_response_for_request(
+async fn build_response_for_request(
   state : AppState,
   request : @http.Request,
 ) -> @http.Response {
@@ -1137,6 +1368,14 @@ fn handle_direct_incoming(
   ingest_ctx : @core.IngestContext,
   normalized : @adapters.NormalizedMessage,
 ) -> Unit {
+  if normalized.sender_id != "" &&
+    normalized.sender_name != "" &&
+    normalized.sender_name != normalized.sender_id {
+    state.direct_user_name_cache.val.set(
+      normalized.sender_id,
+      normalized.sender_name,
+    )
+  }
   if consume_outbound_echo(state, normalized.channel_id, normalized.text) {
     println(
       "ignored outbound echo from direct: channel=\{normalized.channel_id}",

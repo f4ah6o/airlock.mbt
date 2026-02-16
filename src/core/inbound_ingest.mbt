@@ -54,18 +54,14 @@ fn ticket_subject(text : String) -> String {
   if is_blank_text(text) {
     return "Inbound message"
   }
-  let mut out = ""
-  let mut count = 0
+  let sb = StringBuilder::new(size_hint=text.length())
   for c in text {
     if c == '\n' || c == '\r' {
       break
     }
-    if count >= 80 {
-      break
-    }
-    out = out + c.to_string()
-    count = count + 1
+    sb.write_char(c)
   }
+  let out = sb.to_string().trim().to_string()
   if out == "" {
     "Inbound message"
   } else {
@@ -80,7 +76,9 @@ fn find_ticket_by_channel(
   channel_id : String,
 ) -> @shared.Ticket? {
   for t in ticket_repo.list() {
-    if t.chat_a.platform == platform && t.chat_a.dm_id == channel_id {
+    if t.chat_a.platform == platform &&
+      t.chat_a.dm_id == channel_id &&
+      t.status != @shared.Closed {
       return Some(t)
     }
   }
@@ -175,6 +173,11 @@ pub fn ingest_incoming(
   }
 
   let message_id = (ctx.generate_id)()
+  let sender_name = if inbound.sender_name == "" {
+    inbound.sender_id
+  } else {
+    inbound.sender_name
+  }
   let inbound_message = @shared.Message::{
     ..@shared.Message::new(
       message_id,
@@ -184,6 +187,7 @@ pub fn ingest_incoming(
       @shared.ChatA,
       inbound.sender_id,
     ),
+    sender_name,
     timestamp: if inbound.timestamp == "" {
       now
     } else {

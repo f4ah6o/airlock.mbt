@@ -97,3 +97,37 @@ test "ingest_incoming reuses existing ticket by platform+channel" {
   assert_eq(ticket_repo.list().length(), 1)
   assert_eq(message_repo.list_by_ticket(first_ticket).length(), 2)
 }
+
+///|
+test "ingest_incoming creates new ticket when existing channel ticket is closed" {
+  let ticket_repo = TicketRepository::new()
+  let message_repo = MessageRepository::new()
+  let ctx = IngestContext::new(ticket_repo, message_repo, id_gen(), test_now)
+  let first = @shared.InboundMessage::new(
+    "ext_200", "direct4b", "room_XYZ", "user_001", "alice", "first", "2026-02-16T01:00:00Z",
+  )
+  let second = @shared.InboundMessage::new(
+    "ext_201", "direct4b", "room_XYZ", "user_002", "bob", "second", "2026-02-16T01:01:00Z",
+  )
+  let first_result = ingest_incoming(ctx, first)
+  let first_ticket = match first_result {
+    Ok(Created(ticket_id, _)) => ticket_id
+    _ => {
+      assert_true(false)
+      ""
+    }
+  }
+  match ticket_repo.get(first_ticket) {
+    Ok(ticket) => {
+      let closed = @shared.Ticket::{ ..ticket, status: @shared.Closed }
+      let _ = ticket_repo.update(closed)
+    }
+    Err(_) => assert_true(false)
+  }
+  let second_result = ingest_incoming(ctx, second)
+  match second_result {
+    Ok(Created(ticket_id, _)) => assert_true(ticket_id != first_ticket)
+    _ => assert_true(false)
+  }
+  assert_eq(ticket_repo.list().length(), 2)
+}

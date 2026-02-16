@@ -106,6 +106,31 @@ fn direct_error_to_adapter_error(
 }
 
 ///|
+fn user_info_display_name(user : @direct_types.UserInfo) -> String {
+  if user.display_name != "" {
+    user.display_name
+  } else if user.name != "" {
+    user.name
+  } else {
+    @direct_types.id_to_string(user.id)
+  }
+}
+
+///|
+fn upsert_user_map(
+  users : Array[@direct_types.UserInfo],
+  out : Map[String, String],
+) -> Unit {
+  for user in users {
+    let user_id = @direct_types.id_to_string(user.id)
+    let name = user_info_display_name(user)
+    if user_id != "" && name != "" {
+      out.set(user_id, name)
+    }
+  }
+}
+
+///|
 /// Register a handler for incoming Direct messages
 pub fn DirectAdapter::listen_incoming(
   self : DirectAdapter,
@@ -152,6 +177,65 @@ pub fn DirectAdapter::disconnect(
     Err(e) => {
       self.state = AdapterState::Error(@direct_errors.direct_error_to_string(e))
       Err(direct_error_to_adapter_error(e))
+    }
+  }
+}
+
+///|
+/// Fetch known user display names from Direct API.
+pub async fn DirectAdapter::fetch_known_user_names(
+  self : DirectAdapter,
+) -> Result[Array[(String, String)], AdapterError] {
+  let result : Map[String, String] = {}
+  let mut has_success = false
+  let mut first_error : AdapterError? = None
+  match @direct_users.get_friends(self.client) {
+    Ok(users) => {
+      has_success = true
+      upsert_user_map(users, result)
+    }
+    Err(err) =>
+      if first_error is None {
+        first_error = Some(direct_error_to_adapter_error(err))
+      }
+  }
+  match @direct_users.get_acquaintances(self.client) {
+    Ok(users) => {
+      has_success = true
+      upsert_user_map(users, result)
+    }
+    Err(err) =>
+      if first_error is None {
+        first_error = Some(direct_error_to_adapter_error(err))
+      }
+  }
+  match @direct_users.get_me(self.client) {
+    Ok(me) =>
+      match @direct_domains.get_domain_users(self.client, me.domain_id) {
+        Ok(users) => {
+          has_success = true
+          upsert_user_map(users, result)
+        }
+        Err(err) =>
+          if first_error is None {
+            first_error = Some(direct_error_to_adapter_error(err))
+          }
+      }
+    Err(err) =>
+      if first_error is None {
+        first_error = Some(direct_error_to_adapter_error(err))
+      }
+  }
+  if has_success {
+    let pairs : Array[(String, String)] = []
+    for entry in result {
+      pairs.push(entry)
+    }
+    Ok(pairs)
+  } else {
+    match first_error {
+      Some(err) => Err(err)
+      None => Err(UnknownError("failed to fetch direct user names"))
     }
   }
 }

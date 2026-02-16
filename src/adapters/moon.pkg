@@ -1,8 +1,10 @@
 import {
   "airlock/airlock/shared",
   "f4ah6o/direct_sdk/config" @direct_config,
+  "f4ah6o/direct_sdk/api/domains" @direct_domains,
   "f4ah6o/direct_sdk/errors" @direct_errors,
   "f4ah6o/direct_sdk/rpc/client" @rpc_client,
+  "f4ah6o/direct_sdk/api/users" @direct_users,
   "f4ah6o/direct_sdk/types" @direct_types,
   "moonbitlang/async" @async,
 }
