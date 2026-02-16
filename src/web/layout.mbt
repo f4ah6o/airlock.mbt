@@ -72,6 +72,16 @@ fn escape_html_text(text : String) -> String {
 }
 
 ///|
+fn subject_node(subject : String) -> @tmpx.Node {
+  @tmpx.raw(escape_html_text(subject))
+}
+
+///|
+fn titled_subject(prefix : String, subject : String) -> @tmpx.Node {
+  @tmpx.fragment([@tmpx.text(prefix), subject_node(subject)])
+}
+
+///|
 fn parts(
   attrs : Array[@tmpx.Attr],
   children : Array[@tmpx.Node],
@@ -112,7 +122,7 @@ fn render_ticket_item(
             @tmpx.attr("mx-push-url", "/tickets/" + ticket.ticket_id),
           ],
           [
-            @tmpx.strong_parts(parts([], [@tmpx.text(ticket.subject)])),
+            @tmpx.strong_parts(parts([], [subject_node(ticket.subject)])),
             @tmpx.p_parts(
               parts([], [
                 @tmpx.text(
@@ -144,7 +154,7 @@ fn render_ticket_edit_item(ticket : @shared.Ticket) -> @tmpx.Node {
       ),
       @tmpx.div_parts(
         parts([], [
-          @tmpx.strong_parts(parts([], [@tmpx.text(ticket.subject)])),
+          @tmpx.strong_parts(parts([], [subject_node(ticket.subject)])),
           @tmpx.p_parts(
             parts([], [
               @tmpx.text(
@@ -463,7 +473,7 @@ fn center_nodes(
       [
         @tmpx.h2_parts(
           parts([@tmpx.class_("pane-title")], [
-            @tmpx.text("Timeline - " + t.subject),
+            titled_subject("Timeline - ", t.subject),
           ]),
         ),
         message_list(timeline),
@@ -558,7 +568,7 @@ fn right_nodes(
       [
         @tmpx.h2_parts(
           parts([@tmpx.class_("pane-title")], [
-            @tmpx.text("Notes - " + t.subject),
+            titled_subject("Notes - ", t.subject),
           ]),
         ),
         note_message_list(t.ticket_id, t.status == @shared.Closed, notes),
