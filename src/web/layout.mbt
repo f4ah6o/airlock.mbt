@@ -8,7 +8,10 @@ fn app_style() -> String {
     ".ticket-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }",
     ".ticket-item { border: 1px solid transparent; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; display: block; text-decoration: none; color: inherit; }",
     ".ticket-item.is-active { border-color: #2563eb; background: #eff6ff; }", ".chat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; overflow: auto; flex: 1; }",
-    ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; }",
+    ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; max-width: 88%; }",
+    ".chat-item.chat-a { background: #eef2ff; margin-right: auto; border: 1px solid #c7d2fe; }",
+    ".chat-item.console { background: #ecfeff; margin-left: auto; border: 1px solid #a5f3fc; }",
+    ".chat-item.system { background: #fef3c7; margin-inline: auto; border: 1px solid #fde68a; }",
     ".chat-item__meta { font-size: 11px; color: #64748b; margin-bottom: 4px; }",
     ".chat-item__text { font-size: 13px; color: #0f172a; white-space: pre-wrap; }",
     ".note-edit-form { display: grid; gap: 6px; margin-top: 8px; }", ".note-actions { display: flex; gap: 6px; justify-content: flex-end; }",
@@ -19,6 +22,15 @@ fn app_style() -> String {
     ".btn.secondary { background: #0f172a; }", ".placeholder { color: #94a3b8; font-size: 13px; padding: 8px 0; }",
     "@media (max-width: 980px) { .app { grid-template-columns: 1fr; } }",
   ].join("\n")
+}
+
+///|
+fn message_origin_class(origin : @shared.Origin) -> String {
+  match origin {
+    @shared.ChatA => "chat-a"
+    @shared.Console => "console"
+    @shared.System => "system"
+  }
 }
 
 ///|
@@ -117,8 +129,9 @@ fn ticket_list(
 
 ///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
+  let classes = ["chat-item", message_origin_class(message.origin)]
   @tmpx.li_parts(
-    parts([@tmpx.class_("chat-item")], [
+    parts([@tmpx.class_list(classes)], [
       @tmpx.div_parts(
         parts([@tmpx.class_("chat-item__meta")], [
           @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
@@ -135,8 +148,9 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
 
 ///|
 fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
+  let classes = ["chat-item", message_origin_class(message.origin)]
   @tmpx.li_parts(
-    parts([@tmpx.class_("chat-item")], [
+    parts([@tmpx.class_list(classes)], [
       @tmpx.div_parts(
         parts([@tmpx.class_("chat-item__meta")], [
           @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
@@ -151,6 +165,11 @@ fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
         parts(
           [
             @tmpx.class_("note-edit-form"),
+            @tmpx.attr("method", "post"),
+            @tmpx.attr(
+              "action",
+              "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
+            ),
             @tmpx.mx_post(
               "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
             ),
@@ -292,6 +311,8 @@ fn center_nodes(
               @tmpx.class_("form"),
               @tmpx.id_("reply-form-" + t.ticket_id),
               @tmpx.attr("data-form-kind", "reply"),
+              @tmpx.attr("method", "post"),
+              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/reply"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/reply"),
               @tmpx.mx_target("#pane-center"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
@@ -376,6 +397,8 @@ fn right_nodes(
               @tmpx.class_("form"),
               @tmpx.id_("note-form-" + t.ticket_id),
               @tmpx.attr("data-form-kind", "note"),
+              @tmpx.attr("method", "post"),
+              @tmpx.attr("action", "/tickets/" + t.ticket_id + "/notes"),
               @tmpx.mx_post("/tickets/" + t.ticket_id + "/notes"),
               @tmpx.mx_target("#pane-right"),
               @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
@@ -439,6 +462,18 @@ pub fn render_index(
     Some(t) => Some(t.ticket_id)
     None => None
   }
+  let center_attrs : Array[@tmpx.Attr] = [
+    @tmpx.id_("pane-center"),
+    @tmpx.class_("pane"),
+  ]
+  match selected_ticket {
+    Some(t) => {
+      center_attrs.push(@tmpx.mx_get("/partials/ticket/" + t.ticket_id))
+      center_attrs.push(@tmpx.mx_trigger("every 1s"))
+      center_attrs.push(@tmpx.mx_swap(@tmpx.MxSwap::InnerHTML))
+    }
+    None => ()
+  }
   let page = @tmpx.html_parts(
     parts([@tmpx.attr("lang", "ja")], [
       @tmpx.head_parts(
@@ -465,7 +500,7 @@ pub fn render_index(
               ),
               @tmpx.main_parts(
                 parts(
-                  [@tmpx.id_("pane-center"), @tmpx.class_("pane")],
+                  center_attrs,
                   center_nodes(selected_ticket, timeline, None),
                 ),
               ),

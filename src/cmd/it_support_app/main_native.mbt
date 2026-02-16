@@ -784,40 +784,228 @@ fn bind_first_available_port(
 }
 
 ///|
+struct DirectStartupConfig {
+  token : String
+  bot_user_id : String
+  platform : String
+  endpoint : String
+  proxy_url : String
+}
+
+///|
+fn has_prefix(text : String, prefix : String) -> Bool {
+  if text.length() < prefix.length() {
+    return false
+  }
+  for i in 0..<prefix.length() {
+    if text[i] != prefix[i] {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn arg_value(args : Array[String], key : String) -> String? {
+  let prefix = "--" + key + "="
+  for arg in args {
+    if has_prefix(arg, prefix) {
+      let sb = StringBuilder::new(size_hint=arg.length())
+      for i in prefix.length()..<arg.length() {
+        sb.write_char(arg[i].unsafe_to_char())
+      }
+      return Some(sb.to_string())
+    }
+  }
+  None
+}
+
+///|
+fn trim_trailing_newlines(value : String) -> String {
+  let mut end = value.length()
+  while end > 0 {
+    let c = value[end - 1]
+    if c == '\n' || c == '\r' {
+      end = end - 1
+    } else {
+      break
+    }
+  }
+  let sb = StringBuilder::new(size_hint=end)
+  for i in 0..<end {
+    sb.write_char(value[i].unsafe_to_char())
+  }
+  sb.to_string()
+}
+
+///|
+async fn env_value(name : String) -> String {
+  let (exit_code, stdout) = @process.collect_stdout("printenv", [name])
+  if exit_code != 0 {
+    return ""
+  }
+  let text = try? stdout.text()
+  match text {
+    Ok(v) => trim_trailing_newlines(v)
+    Err(_) => ""
+  }
+}
+
+///|
+async fn read_direct_startup_config() -> DirectStartupConfig {
+  let args = @env.args()
+  let token_from_env = env_value("DIRECT4B_API_TOKEN")
+  let bot_user_id_from_env = env_value("DIRECT4B_BOT_USER_ID")
+  let platform_from_env = env_value("DIRECT4B_PLATFORM")
+  let endpoint_from_env = env_value("DIRECT4B_ENDPOINT")
+  let proxy_url_from_env = env_value("DIRECT4B_PROXY_URL")
+
+  let token = if token_from_env != "" {
+    token_from_env
+  } else {
+    match arg_value(args, "direct-token") {
+      Some(v) => v
+      None => ""
+    }
+  }
+  let bot_user_id = if bot_user_id_from_env != "" {
+    bot_user_id_from_env
+  } else {
+    match arg_value(args, "direct-bot-user-id") {
+      Some(v) => v
+      None => ""
+    }
+  }
+  let platform = if platform_from_env != "" {
+    platform_from_env
+  } else {
+    match arg_value(args, "direct-platform") {
+      Some(v) => if v == "" { "direct4b" } else { v }
+      None => "direct4b"
+    }
+  }
+  let endpoint = if endpoint_from_env != "" {
+    endpoint_from_env
+  } else {
+    match arg_value(args, "direct-endpoint") {
+      Some(v) => v
+      None => ""
+    }
+  }
+  let proxy_url = if proxy_url_from_env != "" {
+    proxy_url_from_env
+  } else {
+    match arg_value(args, "direct-proxy-url") {
+      Some(v) => v
+      None => ""
+    }
+  }
+  { token, bot_user_id, platform, endpoint, proxy_url }
+}
+
+///|
+fn build_ingest_context(state : AppState) -> @core.IngestContext {
+  @core.IngestContext::new(
+    state.ticket_repo,
+    state.message_repo,
+    fn() { next_id(state.id_counter, "id") },
+    fn() { @env.now().to_string() },
+  )
+}
+
+///|
+fn handle_direct_incoming(
+  ingest_ctx : @core.IngestContext,
+  normalized : @adapters.NormalizedMessage,
+) -> Unit {
+  match @core.ingest_incoming(ingest_ctx, normalized.to_inbound()) {
+    Ok(@core.Created(ticket_id, message_id)) =>
+      println(
+        "ingested direct message: ticket=\{ticket_id}, message=\{message_id}",
+      )
+    Ok(@core.DuplicateIgnored(ticket_id, message_id)) =>
+      println(
+        "ignored duplicated direct message: ticket=\{ticket_id}, message=\{message_id}",
+      )
+    Err(err) => println("failed to ingest direct message: \{err.to_string()}")
+  }
+}
+
+///|
+async fn try_start_direct_bridge(
+  ingest_ctx : @core.IngestContext,
+  tasks : @async.TaskGroup[Unit],
+) -> Unit {
+  let cfg = read_direct_startup_config()
+  if cfg.token == "" || cfg.bot_user_id == "" {
+    println(
+      "direct bridge disabled: set DIRECT4B_API_TOKEN and DIRECT4B_BOT_USER_ID",
+    )
+    return
+  }
+  let adapter_cfg = @adapters.AdapterConfig::new(
+    cfg.platform,
+    cfg.bot_user_id,
+    cfg.token,
+  )
+  let adapter = @adapters.DirectAdapter::new(
+    adapter_cfg,
+    endpoint=cfg.endpoint,
+    proxy_url=cfg.proxy_url,
+  )
+  adapter.listen_incoming(fn(normalized) {
+    handle_direct_incoming(ingest_ctx, normalized)
+  })
+  match adapter.connect(tasks) {
+    Ok(_) =>
+      println(
+        "direct bridge connected (platform=\{cfg.platform}, bot_user_id=\{cfg.bot_user_id})",
+      )
+    Err(err) => println("direct bridge connect failed: \{err.to_string()}")
+  }
+}
+
+///|
 async fn main {
   let state = seed_state()
-  match bind_first_available_port(8080, 50) {
-    Some((server, port)) => {
-      println("it-support-app listening on http://0.0.0.0:" + port.to_string())
-      server.run_forever(async fn(conn, _peer_addr) {
-        let decoder = @http.RequestDecoder::new()
-        while conn.read_some() is Some(data) {
-          match decoder.feed(bytes_to_array(data)) {
-            Err(_) => {
-              let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-              conn.write(array_to_bytes(string_to_bytes(response_str)))
-              return
+  let ingest_ctx = build_ingest_context(state)
+  @async.with_task_group(async fn(tasks) {
+    try_start_direct_bridge(ingest_ctx, tasks)
+    match bind_first_available_port(8080, 50) {
+      Some((server, port)) => {
+        println(
+          "it-support-app listening on http://0.0.0.0:" + port.to_string(),
+        )
+        server.run_forever(async fn(conn, _peer_addr) {
+          let decoder = @http.RequestDecoder::new()
+          while conn.read_some() is Some(data) {
+            match decoder.feed(bytes_to_array(data)) {
+              Err(_) => {
+                let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+                conn.write(array_to_bytes(string_to_bytes(response_str)))
+                return
+              }
+              Ok(_) => ()
             }
-            Ok(_) => ()
+            match decoder.decode() {
+              Ok(Some(request)) => {
+                let response = build_response_for_request(state, request)
+                let response_bytes = @http.encode_response(response)
+                conn.write(array_to_bytes(response_bytes))
+                return
+              }
+              Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
+              Err(_) => {
+                let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
+                conn.write(array_to_bytes(string_to_bytes(response_str)))
+                return
+              }
+            }
           }
-          match decoder.decode() {
-            Ok(Some(request)) => {
-              let response = build_response_for_request(state, request)
-              let response_bytes = @http.encode_response(response)
-              conn.write(array_to_bytes(response_bytes))
-              return
-            }
-            Ok(None) | Err(@http.HttpError::UnexpectedEof) => ()
-            Err(_) => {
-              let response_str = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\nConnection: close\r\n\r\nBad Request"
-              conn.write(array_to_bytes(string_to_bytes(response_str)))
-              return
-            }
-          }
-        }
-      })
+        })
+      }
+      None =>
+        println("failed to bind server: no available port in range 8080..8129")
     }
-    None =>
-      println("failed to bind server: no available port in range 8080..8129")
-  }
+  })
 }

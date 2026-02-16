@@ -1,10 +1,13 @@
 import {
+  "airlock/airlock/adapters" @adapters,
   "airlock/airlock/core" @core,
   "airlock/airlock/shared" @shared,
   "airlock/airlock/web" @web,
   "f4ah6o/http11" @http,
+  "moonbitlang/core/env" @env,
   "moonbitlang/core/encoding/utf8",
-  "moonbitlang/async",
+  "moonbitlang/async" @async,
+  "moonbitlang/async/process" @process,
   "moonbitlang/async/socket" @socket,
   "moonbitlang/x/fs" @fs,
 }
