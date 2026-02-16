@@ -361,6 +361,14 @@ fn js_response(body : String) -> @http.Response {
 }
 
 ///|
+fn redirect_to_ticket(ticket_id : String) -> @http.Response {
+  @http.Response::new(303, "See Other")
+  .header("Location", "/tickets/" + ticket_id)
+  .header("Content-Length", "0")
+  .header("Connection", "close")
+}
+
+///|
 fn read_asset(path : String) -> String? {
   if !@fs.path_exists(path) {
     return None
@@ -482,6 +490,127 @@ fn handle_post(
   mhx_request : Bool,
 ) -> @http.Response {
   let parts = split_path(path)
+  if parts.length() == 5 &&
+    parts[0] == "tickets" &&
+    parts[2] == "notes" {
+    let ticket_id = parts[1]
+    let message_id = parts[3]
+    let note_action = parts[4]
+    let form = parse_form(body_to_string(body))
+    let intent = match form.get("intent") {
+      Some(v) => v
+      None => ""
+    }
+    let ticket = match state.ticket_repo.get(ticket_id) {
+      Ok(t) => Some(t)
+      Err(_) => None
+    }
+    let notes = state.message_repo
+      .list_workspace_by_ticket(ticket_id)
+      .filter(fn(m) { m.visibility == @shared.Internal })
+    if intent == "reply" {
+      if mhx_request {
+        return html_error_response(
+          422,
+          "Unprocessable Entity",
+          @web.render_right_partial(
+            ticket,
+            notes,
+            Some("Invalid form intent for note."),
+          ),
+        )
+      }
+      return build_response(
+        422,
+        "Unprocessable Entity",
+        "Invalid form intent for note.",
+        "text/plain; charset=utf-8",
+      )
+    }
+    match state.message_repo.get(message_id) {
+      Err(_) => {
+        let notes2 = state.message_repo
+          .list_workspace_by_ticket(ticket_id)
+          .filter(fn(m) { m.visibility == @shared.Internal })
+        if mhx_request {
+          return html_response(@web.render_right_partial(ticket, notes2, None))
+        }
+        return redirect_to_ticket(ticket_id)
+      }
+      Ok(note_message) => {
+        if note_message.ticket_id != ticket_id ||
+          note_message.visibility != @shared.Internal {
+          let notes2 = state.message_repo
+            .list_workspace_by_ticket(ticket_id)
+            .filter(fn(m) { m.visibility == @shared.Internal })
+          if mhx_request {
+            return html_response(@web.render_right_partial(ticket, notes2, None))
+          }
+          return redirect_to_ticket(ticket_id)
+        }
+        match note_action {
+          "edit" => {
+            let text = match form.get("note_text") {
+              Some(v) => v
+              None => ""
+            }
+            if is_blank_text(text) {
+              if mhx_request {
+                return html_error_response(
+                  422,
+                  "Unprocessable Entity",
+                  @web.render_right_partial(
+                    ticket,
+                    notes,
+                    Some("Note text is required."),
+                  ),
+                )
+              }
+              return build_response(
+                422,
+                "Unprocessable Entity",
+                "Note text is required.",
+                "text/plain; charset=utf-8",
+              )
+            }
+            let updated = @shared.Message::{ ..note_message, text }
+            let _ = state.message_repo.update(updated)
+            let notes2 = state.message_repo
+              .list_workspace_by_ticket(ticket_id)
+              .filter(fn(m) { m.visibility == @shared.Internal })
+            if mhx_request {
+              return html_response(@web.render_right_partial(ticket, notes2, None))
+            }
+            return redirect_to_ticket(ticket_id)
+          }
+          "delete" => {
+            match state.message_repo.delete(message_id) {
+              Err(_) => {
+                let notes2 = state.message_repo
+                  .list_workspace_by_ticket(ticket_id)
+                  .filter(fn(m) { m.visibility == @shared.Internal })
+                if mhx_request {
+                  return html_response(
+                    @web.render_right_partial(ticket, notes2, None),
+                  )
+                }
+                return redirect_to_ticket(ticket_id)
+              }
+              Ok(_) => ()
+            }
+            let notes2 = state.message_repo
+              .list_workspace_by_ticket(ticket_id)
+              .filter(fn(m) { m.visibility == @shared.Internal })
+            if mhx_request {
+              return html_response(@web.render_right_partial(ticket, notes2, None))
+            }
+            return redirect_to_ticket(ticket_id)
+          }
+          _ => return not_found_response()
+        }
+      }
+    }
+  }
   if parts.length() == 3 && parts[0] == "tickets" {
     let ticket_id = parts[1]
     let action = parts[2]
@@ -554,7 +683,7 @@ fn handle_post(
             @web.render_center_partial(ticket, timeline2, None),
           )
         }
-        return full_page_response(state, Some(ticket_id))
+        return redirect_to_ticket(ticket_id)
       }
       "notes" => {
         let text = match form.get("note_text") {
@@ -619,7 +748,7 @@ fn handle_post(
         if mhx_request {
           return html_response(@web.render_right_partial(ticket, notes2, None))
         }
-        return full_page_response(state, Some(ticket_id))
+        return redirect_to_ticket(ticket_id)
       }
       _ => ()
     }

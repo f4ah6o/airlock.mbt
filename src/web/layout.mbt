@@ -11,12 +11,40 @@ fn app_style() -> String {
     ".chat-item { background: #f8fafc; border-radius: 8px; padding: 8px 10px; }",
     ".chat-item__meta { font-size: 11px; color: #64748b; margin-bottom: 4px; }",
     ".chat-item__text { font-size: 13px; color: #0f172a; white-space: pre-wrap; }",
+    ".note-edit-form { display: grid; gap: 6px; margin-top: 8px; }",
+    ".note-actions { display: flex; gap: 6px; justify-content: flex-end; }",
+    ".note-inline-input { min-height: 56px; }",
     ".form { margin-top: 10px; display: grid; gap: 8px; }", ".input { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.16); padding: 8px; font-size: 13px; }",
     ".form-error { font-size: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px; }",
     ".btn { background: #2563eb; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }",
     ".btn.secondary { background: #0f172a; }", ".placeholder { color: #94a3b8; font-size: 13px; padding: 8px 0; }",
     "@media (max-width: 980px) { .app { grid-template-columns: 1fr; } }",
   ].join("\n")
+}
+
+///|
+fn escape_html_text(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length())
+  for c in text {
+    if c == '&' {
+      sb.write_string("&amp;")
+    } else if c == '<' {
+      sb.write_string("&lt;")
+    } else if c == '>' {
+      sb.write_string("&gt;")
+    } else if c == '"' {
+      sb.write_string("&quot;")
+    } else if c == '\'' {
+      sb.write_string("&#39;")
+    } else if c.to_int() > 127 {
+      sb.write_string("&#")
+      sb.write_string(c.to_int().to_string())
+      sb.write_string(";")
+    } else {
+      sb.write_char(c)
+    }
+  }
+  sb.to_string()
 }
 
 ///|
@@ -90,29 +118,6 @@ fn ticket_list(
 
 ///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
-  fn escape_html_text(text : String) -> String {
-    let sb = StringBuilder::new(size_hint=text.length())
-    for c in text {
-      if c == '&' {
-        sb.write_string("&amp;")
-      } else if c == '<' {
-        sb.write_string("&lt;")
-      } else if c == '>' {
-        sb.write_string("&gt;")
-      } else if c == '"' {
-        sb.write_string("&quot;")
-      } else if c == '\'' {
-        sb.write_string("&#39;")
-      } else if c.to_int() > 127 {
-        sb.write_string("&#")
-        sb.write_string(c.to_int().to_string())
-        sb.write_string(";")
-      } else {
-        sb.write_char(c)
-      }
-    }
-    sb.to_string()
-  }
   @tmpx.li_parts(
     parts([@tmpx.class_("chat-item")], [
       @tmpx.div_parts(
@@ -130,6 +135,84 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
 }
 
 ///|
+fn note_item(ticket_id : String, message : @shared.Message) -> @tmpx.Node {
+  @tmpx.li_parts(
+    parts([@tmpx.class_("chat-item")], [
+      @tmpx.div_parts(
+        parts([@tmpx.class_("chat-item__meta")], [
+          @tmpx.text(message.sender_id + " - " + message.origin.to_string()),
+        ]),
+      ),
+      @tmpx.div_parts(
+        parts([@tmpx.class_("chat-item__text")], [
+          @tmpx.raw(escape_html_text(message.text)),
+        ]),
+      ),
+      @tmpx.form_parts(
+        parts([
+          @tmpx.class_("note-edit-form"),
+          @tmpx.mx_post(
+            "/tickets/" + ticket_id + "/notes/" + message.message_id + "/edit",
+          ),
+          @tmpx.mx_target("#pane-right"),
+          @tmpx.mx_swap(@tmpx.MxSwap::InnerHTML),
+        ], [
+          @tmpx.textarea_parts(
+            parts([
+              @tmpx.class_("input note-inline-input"),
+              @tmpx.attr("name", "note_text"),
+            ], [@tmpx.raw(escape_html_text(message.text))]),
+          ),
+          @tmpx.unsafe_custom_element(
+            "input",
+            parts([
+              @tmpx.attr("type", "hidden"),
+              @tmpx.attr("name", "intent"),
+              @tmpx.attr("value", "note"),
+            ], []),
+          ),
+          @tmpx.div_parts(
+            parts([@tmpx.class_("note-actions")], [
+              @tmpx.button_parts(
+                parts([
+                  @tmpx.class_("btn secondary"),
+                  @tmpx.attr("type", "submit"),
+                ], [@tmpx.text("Save note")]),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+      @tmpx.form_parts(
+        parts([
+          @tmpx.class_("note-actions"),
+          @tmpx.attr("method", "post"),
+          @tmpx.attr(
+            "action",
+            "/tickets/" + ticket_id + "/notes/" + message.message_id + "/delete",
+          ),
+        ], [
+          @tmpx.unsafe_custom_element(
+            "input",
+            parts([
+              @tmpx.attr("type", "hidden"),
+              @tmpx.attr("name", "intent"),
+              @tmpx.attr("value", "note"),
+            ], []),
+          ),
+          @tmpx.button_parts(
+            parts([
+              @tmpx.class_("btn"),
+              @tmpx.attr("type", "submit"),
+            ], [@tmpx.text("Delete note")]),
+          ),
+        ]),
+      ),
+    ]),
+  )
+}
+
+///|
 fn message_list(messages : Array[@shared.Message]) -> @tmpx.Node {
   if messages.is_empty() {
     return @tmpx.div_parts(
@@ -137,6 +220,24 @@ fn message_list(messages : Array[@shared.Message]) -> @tmpx.Node {
     )
   }
   @tmpx.ul_parts(parts([@tmpx.class_("chat-list")], messages.map(message_item)))
+}
+
+///|
+fn note_message_list(
+  ticket_id : String,
+  messages : Array[@shared.Message],
+) -> @tmpx.Node {
+  if messages.is_empty() {
+    return @tmpx.div_parts(
+      parts([@tmpx.class_("placeholder")], [@tmpx.text("No messages yet.")]),
+    )
+  }
+  @tmpx.ul_parts(
+    parts(
+      [@tmpx.class_("chat-list")],
+      messages.map(fn(message) { note_item(ticket_id, message) }),
+    ),
+  )
 }
 
 ///|
@@ -242,7 +343,7 @@ fn right_nodes(
             @tmpx.text("Notes - " + t.subject),
           ]),
         ),
-        message_list(notes),
+        note_message_list(t.ticket_id, notes),
         @tmpx.form_parts(
           parts([
             @tmpx.class_("form"),
