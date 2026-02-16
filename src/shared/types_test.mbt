@@ -99,3 +99,14 @@ test "AICheckResult creation" {
   assert_eq(fail.passed, false)
   assert_eq(fail.warnings.length(), 2)
 }
+
+///|
+test "InboundMessage creation" {
+  let inbound = InboundMessage::new(
+    "ext_001", "direct4b", "room_123", "user_001", "alice", "help needed", "2026-02-16T00:00:00Z",
+  )
+  assert_eq(inbound.external_id, "ext_001")
+  assert_eq(inbound.platform, "direct4b")
+  assert_eq(inbound.channel_id, "room_123")
+  assert_eq(inbound.attachments.length(), 0)
+}

@@ -56,6 +56,22 @@ pub fn DraftStatus::to_string(Self) -> String
 pub impl Eq for DraftStatus
 pub impl Show for DraftStatus
 
+pub(all) struct InboundMessage {
+  external_id : String
+  platform : String
+  channel_id : String
+  sender_id : String
+  sender_name : String
+  text : String
+  attachments : Array[Attachment]
+  timestamp : String
+  reply_to_id : String
+  raw_data : String
+}
+pub fn InboundMessage::new(String, String, String, String, String, String, String) -> Self
+pub impl Eq for InboundMessage
+pub impl Show for InboundMessage
+
 pub(all) struct LogEntry {
   log_id : String
   ticket_id : String

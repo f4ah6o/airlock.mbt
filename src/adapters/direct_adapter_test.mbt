@@ -39,3 +39,14 @@ test "direct_message_to_normalized falls back to talk_id" {
   assert_eq(normalized.channel_id, "talk-2")
   assert_true(normalized.is_bot)
 }
+
+///|
+test "normalized message converts to inbound message" {
+  let normalized = NormalizedMessage::new(
+    "ext-1", "direct4b", "room-1", "user-1", "alice", "hello", "2026-02-16T00:00:00Z",
+  )
+  let inbound = normalized.to_inbound()
+  assert_eq(inbound.external_id, "ext-1")
+  assert_eq(inbound.channel_id, "room-1")
+  assert_eq(inbound.text, "hello")
+}

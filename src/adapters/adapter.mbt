@@ -41,6 +41,25 @@ pub fn NormalizedMessage::new(
 }
 
 ///|
+/// Convert adapter normalized message into shared inbound message.
+pub fn NormalizedMessage::to_inbound(
+  self : NormalizedMessage,
+) -> @shared.InboundMessage {
+  {
+    external_id: self.external_id,
+    platform: self.platform,
+    channel_id: self.channel_id,
+    sender_id: self.sender_id,
+    sender_name: self.sender_name,
+    text: self.text,
+    attachments: self.attachments,
+    timestamp: self.timestamp,
+    reply_to_id: self.reply_to_id,
+    raw_data: self.raw_data,
+  }
+}
+
+///|
 /// Outbound message to send via adapter
 pub(all) struct OutboundMessage {
   channel_id : String // Target DM/Channel ID

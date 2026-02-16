@@ -11,6 +11,13 @@ import {
 // Errors
 
 // Types and methods
+pub(all) enum InboundPersistResult {
+  Created(String, String)
+  DuplicateIgnored(String, String)
+}
+pub impl Eq for InboundPersistResult
+pub impl Show for InboundPersistResult
+
 pub(all) struct LogStore {
   conn : @duckdb.Connection
 }
@@ -18,6 +25,7 @@ pub fn LogStore::append_entry(Self, @shared.LogEntry, on_complete? : (Result[Uni
 pub fn LogStore::close(Self, on_complete? : (Result[Unit, LogStoreError]) -> Unit) -> Unit
 pub fn LogStore::list_recent(Self, on_done~ : (Result[Array[@shared.LogEntry], LogStoreError]) -> Unit, limit? : Int) -> Unit
 pub fn LogStore::open(on_ready~ : (Result[Self, LogStoreError]) -> Unit, path? : String, backend? : @duckdb.JsBackend) -> Unit
+pub fn LogStore::persist_inbound(Self, @shared.InboundMessage, () -> String, () -> String, on_done~ : (Result[InboundPersistResult, LogStoreError]) -> Unit) -> Unit
 
 pub(all) enum LogStoreError {
   DuckDB(String)

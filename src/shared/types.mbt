@@ -125,6 +125,46 @@ pub fn ChatAMetadata::new(
 }
 
 ///|
+/// Normalized inbound message from external chat platforms.
+pub(all) struct InboundMessage {
+  external_id : String
+  platform : String
+  channel_id : String
+  sender_id : String
+  sender_name : String
+  text : String
+  attachments : Array[Attachment]
+  timestamp : String
+  reply_to_id : String
+  raw_data : String
+} derive(Show, Eq)
+
+///|
+/// Create a new InboundMessage.
+pub fn InboundMessage::new(
+  external_id : String,
+  platform : String,
+  channel_id : String,
+  sender_id : String,
+  sender_name : String,
+  text : String,
+  timestamp : String,
+) -> InboundMessage {
+  {
+    external_id,
+    platform,
+    channel_id,
+    sender_id,
+    sender_name,
+    text,
+    attachments: [],
+    timestamp,
+    reply_to_id: "",
+    raw_data: "",
+  }
+}
+
+///|
 /// AI check result structure
 pub(all) struct AICheckResult {
   passed : Bool

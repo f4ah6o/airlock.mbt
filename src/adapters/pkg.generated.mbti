@@ -78,6 +78,7 @@ pub(all) struct NormalizedMessage {
   raw_data : String
 }
 pub fn NormalizedMessage::new(String, String, String, String, String, String, String) -> Self
+pub fn NormalizedMessage::to_inbound(Self) -> @shared.InboundMessage
 pub impl Eq for NormalizedMessage
 pub impl Show for NormalizedMessage
 

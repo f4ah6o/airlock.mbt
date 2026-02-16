@@ -2,6 +2,7 @@
 package "airlock/airlock/core"
 
 import {
+  "airlock/airlock/logs",
   "airlock/airlock/shared",
 }
 
@@ -11,6 +12,8 @@ pub fn can_edit(@shared.DraftStatus) -> Bool
 pub fn can_publish(@shared.DraftStatus) -> Bool
 
 pub fn complete_check(@shared.Message, @shared.AICheckResult) -> Result[@shared.Message, StateTransitionError]
+
+pub fn ingest_incoming(IngestContext, @shared.InboundMessage) -> Result[IngestResult, IngestError]
 
 pub fn is_final_state(@shared.DraftStatus) -> Bool
 
@@ -27,6 +30,29 @@ pub fn transition_draft_status(@shared.DraftStatus, @shared.DraftStatus) -> Resu
 // Errors
 
 // Types and methods
+pub(all) struct IngestContext {
+  ticket_repo : TicketRepository
+  message_repo : MessageRepository
+  generate_id : () -> String
+  current_timestamp : () -> String
+  log_store : @logs.LogStore?
+}
+pub fn IngestContext::new(TicketRepository, MessageRepository, () -> String, () -> String, log_store? : @logs.LogStore) -> Self
+
+pub(all) enum IngestError {
+  InvalidInput(String)
+  PersistenceFailed(String)
+}
+pub impl Eq for IngestError
+pub impl Show for IngestError
+
+pub(all) enum IngestResult {
+  Created(String, String)
+  DuplicateIgnored(String, String)
+}
+pub impl Eq for IngestResult
+pub impl Show for IngestResult
+
 pub(all) struct MessageRepository {
   messages : Map[String, @shared.Message]
   by_ticket : Map[String, Array[String]]

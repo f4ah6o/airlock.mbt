@@ -1,3 +1,4 @@
 import {
   "airlock/airlock/shared",
+  "airlock/airlock/logs",
 }
