@@ -276,6 +276,7 @@ struct AppState {
   realtime_version : Ref[Int]
   realtime_last_ticket_id : Ref[String]
   direct_adapter : Ref[@adapters.DirectAdapter?]
+  direct_bridge_connecting : Ref[Bool]
   outbound_queue : Ref[Array[@adapters.OutboundMessage]]
   outbound_echo_counts : Ref[Map[String, Int]]
   direct_user_name_cache : Ref[Map[String, String]]
@@ -330,6 +331,7 @@ fn seed_state() -> AppState {
     realtime_version: { val: 0 },
     realtime_last_ticket_id: { val: "" },
     direct_adapter: { val: None },
+    direct_bridge_connecting: { val: false },
     outbound_queue: { val: [] },
     outbound_echo_counts: { val: {} },
     direct_user_name_cache: { val: {} },
@@ -433,6 +435,14 @@ async fn process_outbound_queue_once(state : AppState) -> Unit {
     Err(err) => {
       println("direct outbound failed: \{err.to_string()}")
       state.outbound_queue.val.push(outbound)
+      match err {
+        @adapters.ConnectionError(_) => {
+          state.direct_adapter.val = None
+          state.direct_user_names_loaded.val = false
+          println("direct adapter reset: will retry connect")
+        }
+        _ => ()
+      }
     }
   }
 }
@@ -442,6 +452,22 @@ async fn process_outbound_queue_loop(state : AppState) -> Unit {
   while true {
     process_outbound_queue_once(state)
     @async.sleep(200)
+  }
+}
+
+///|
+async fn maintain_direct_bridge_loop(
+  state : AppState,
+  ingest_ctx : @core.IngestContext,
+  tasks : @async.TaskGroup[Unit],
+) -> Unit {
+  while true {
+    if state.direct_adapter.val is None && !state.direct_bridge_connecting.val {
+      state.direct_bridge_connecting.val = true
+      try_start_direct_bridge(state, ingest_ctx, tasks)
+      state.direct_bridge_connecting.val = false
+    }
+    @async.sleep(2000)
   }
 }
 
@@ -1442,7 +1468,7 @@ async fn main {
   let ingest_ctx = build_ingest_context(state)
   @async.with_task_group(async fn(tasks) {
     tasks.spawn_bg(() => process_outbound_queue_loop(state))
-    try_start_direct_bridge(state, ingest_ctx, tasks)
+    tasks.spawn_bg(() => maintain_direct_bridge_loop(state, ingest_ctx, tasks))
     match bind_first_available_port(8080, 50) {
       Some((server, port)) => {
         println(
