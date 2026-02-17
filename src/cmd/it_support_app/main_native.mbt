@@ -273,6 +273,7 @@ struct AppState {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
   id_counter : Ref[Int]
+  dev_mode : Ref[Bool]
   realtime_version : Ref[Int]
   realtime_last_ticket_id : Ref[String]
   direct_adapter : Ref[@adapters.DirectAdapter?]
@@ -281,6 +282,7 @@ struct AppState {
   outbound_echo_counts : Ref[Map[String, Int]]
   direct_user_name_cache : Ref[Map[String, String]]
   direct_user_names_loaded : Ref[Bool]
+  attachment_upload_cmd : Ref[String]
 }
 
 ///|
@@ -328,6 +330,7 @@ fn seed_state() -> AppState {
     ticket_repo,
     message_repo,
     id_counter,
+    dev_mode: { val: false },
     realtime_version: { val: 0 },
     realtime_last_ticket_id: { val: "" },
     direct_adapter: { val: None },
@@ -336,6 +339,7 @@ fn seed_state() -> AppState {
     outbound_echo_counts: { val: {} },
     direct_user_name_cache: { val: {} },
     direct_user_names_loaded: { val: false },
+    attachment_upload_cmd: { val: "" },
   }
 }
 
@@ -1281,6 +1285,17 @@ fn has_prefix(text : String, prefix : String) -> Bool {
 }
 
 ///|
+fn has_flag(args : Array[String], key : String) -> Bool {
+  let flag = "--" + key
+  for arg in args {
+    if arg == flag {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn arg_value(args : Array[String], key : String) -> String? {
   let prefix = "--" + key + "="
   for arg in args {
@@ -1389,11 +1404,120 @@ fn build_ingest_context(state : AppState) -> @core.IngestContext {
 }
 
 ///|
-fn handle_direct_incoming(
+fn first_non_empty_line(text : String) -> String {
+  for line in text.split("\n") {
+    let trimmed = line.to_string().trim().to_string()
+    if trimmed != "" {
+      return trimmed
+    }
+  }
+  ""
+}
+
+///|
+fn append_lines(base : String, lines : Array[String]) -> String {
+  if lines.is_empty() {
+    return base
+  }
+  let suffix = lines.join("\n")
+  if base == "" {
+    suffix
+  } else {
+    base + "\n" + suffix
+  }
+}
+
+///|
+async fn upload_attachment_url_with_hook(
+  state : AppState,
+  normalized : @adapters.NormalizedMessage,
+  attachment : @shared.Attachment,
+) -> String? {
+  let command = state.attachment_upload_cmd.val.trim().to_string()
+  if command == "" || attachment.url == "" {
+    return None
+  }
+  let envs : Map[String, String] = {}
+  envs.set("AIRLOCK_ATTACHMENT_URL", attachment.url)
+  envs.set("AIRLOCK_ATTACHMENT_NAME", attachment.name)
+  envs.set("AIRLOCK_ATTACHMENT_TYPE", attachment.attachment_type.to_string())
+  envs.set("AIRLOCK_MESSAGE_EXTERNAL_ID", normalized.external_id)
+  envs.set("AIRLOCK_CHANNEL_ID", normalized.channel_id)
+  envs.set("AIRLOCK_PLATFORM", normalized.platform)
+  let (exit_code, stdout) = @process.collect_stdout(
+    "sh",
+    ["-c", command],
+    extra_env=envs,
+  )
+  if exit_code != 0 {
+    return None
+  }
+  let out_text_result = try? stdout.text()
+  let out_text = match out_text_result {
+    Ok(v) => v
+    Err(_) => ""
+  }
+  let uploaded_url = first_non_empty_line(out_text)
+  if uploaded_url == "" {
+    None
+  } else {
+    Some(uploaded_url)
+  }
+}
+
+///|
+async fn rewrite_attachment_urls(
+  state : AppState,
+  normalized : @adapters.NormalizedMessage,
+) -> @adapters.NormalizedMessage {
+  if normalized.attachments.is_empty() {
+    return normalized
+  }
+  let hook_enabled = state.attachment_upload_cmd.val.trim().to_string() != ""
+  let rewritten : Array[@shared.Attachment] = []
+  let attachment_lines : Array[String] = []
+  let mut failed = 0
+  for attachment in normalized.attachments {
+    let final_attachment = match
+      upload_attachment_url_with_hook(state, normalized, attachment) {
+      Some(url) => @shared.Attachment::{ ..attachment, url, }
+      None => {
+        if hook_enabled {
+          failed = failed + 1
+        }
+        attachment
+      }
+    }
+    rewritten.push(final_attachment)
+    if final_attachment.url != "" {
+      attachment_lines.push(
+        "[attachment] " + final_attachment.name + " " + final_attachment.url,
+      )
+    }
+  }
+  let lines = attachment_lines
+  if failed > 0 && hook_enabled {
+    lines.push("[attachment-upload-failed] count=" + failed.to_string())
+  }
+  @adapters.NormalizedMessage::{
+    ..normalized,
+    attachments: rewritten,
+    text: append_lines(normalized.text, lines),
+  }
+}
+
+///|
+async fn handle_direct_incoming_async(
   state : AppState,
   ingest_ctx : @core.IngestContext,
   normalized : @adapters.NormalizedMessage,
 ) -> Unit {
+  let normalized = rewrite_attachment_urls(state, normalized)
+  let normalized = if state.dev_mode.val && normalized.raw_data != "" {
+    @adapters.NormalizedMessage::{ ..normalized, text: normalized.raw_data }
+  } else {
+    normalized
+  }
   if normalized.sender_id != "" &&
     normalized.sender_name != "" &&
     normalized.sender_name != normalized.sender_id {
@@ -1449,7 +1573,9 @@ async fn try_start_direct_bridge(
     proxy_url=cfg.proxy_url,
   )
   adapter.listen_incoming(fn(normalized) {
-    handle_direct_incoming(state, ingest_ctx, normalized)
+    tasks.spawn_bg(() => {
+      handle_direct_incoming_async(state, ingest_ctx, normalized)
+    })
   })
   match adapter.connect(tasks) {
     Ok(_) => {
@@ -1465,6 +1591,15 @@ async fn try_start_direct_bridge(
 ///|
 async fn main {
   let state = seed_state()
+  let args = @env.args()
+  state.dev_mode.val = has_flag(args, "dev")
+  if state.dev_mode.val {
+    println("dev mode enabled: timeline renders raw_data when available")
+  }
+  state.attachment_upload_cmd.val = env_value("AIRLOCK_ATTACHMENT_UPLOAD_CMD")
+  if state.attachment_upload_cmd.val.trim().to_string() != "" {
+    println("attachment upload hook enabled via AIRLOCK_ATTACHMENT_UPLOAD_CMD")
+  }
   let ingest_ctx = build_ingest_context(state)
   @async.with_task_group(async fn(tasks) {
     tasks.spawn_bg(() => process_outbound_queue_loop(state))
