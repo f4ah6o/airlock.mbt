@@ -10,6 +10,7 @@ rustfs_console := "http://127.0.0.1:9001"
 rustfs_access_key := "rustfsadmin"
 rustfs_secret_key := "rustfsadmin"
 rustfs_bucket := "airlock-attachments"
+awslim_s3_bin := "../awslim/awslim-s3"
 
 default: check test
 
@@ -30,6 +31,22 @@ run:
 
 run-native:
     moon run src/cmd/it_support_app --target native
+
+login:
+    @bash -ceu 'set -euo pipefail; \
+      if command -v opz >/dev/null 2>&1; then \
+        opz daab-dev -- moon -C ../direct_sdk.mbt run src/daab --target native -- login --force; \
+      else \
+        moon -C ../direct_sdk.mbt run src/daab --target native -- login --force; \
+      fi'
+
+login-token token:
+    @bash -ceu 'set -euo pipefail; \
+      if command -v opz >/dev/null 2>&1; then \
+        opz daab-dev -- moon -C ../direct_sdk.mbt run src/daab --target native -- login --token "{{token}}" --force; \
+      else \
+        moon -C ../direct_sdk.mbt run src/daab --target native -- login --token "{{token}}" --force; \
+      fi'
 
 s3-rustfs-up:
     @bash -ceu 'set -euo pipefail; \
@@ -64,22 +81,37 @@ s3-rustfs-logs:
 
 s3-rustfs-mk-bucket:
     @bash -ceu 'set -euo pipefail; \
-      if ! command -v aws >/dev/null 2>&1; then \
-        echo "aws cli is required (install AWS CLI first)"; \
+      awslim_bin="${AWSLIM_S3_BIN:-{{awslim_s3_bin}}}"; \
+      if [[ ! -x "$awslim_bin" ]]; then \
+        echo "awslim-s3 binary is required: $awslim_bin"; \
         exit 2; \
       fi; \
+      export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-{{rustfs_access_key}}}"; \
+      export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-{{rustfs_secret_key}}}"; \
+      export AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"; \
+      export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-$AWS_REGION}"; \
       endpoint="${S3_ENDPOINT_URL:-{{rustfs_endpoint}}}"; \
+      export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$endpoint}"; \
       bucket="${S3_BUCKET:-{{rustfs_bucket}}}"; \
-      aws --endpoint-url "$endpoint" s3api create-bucket --bucket "$bucket" >/dev/null 2>&1 || true; \
-      aws --endpoint-url "$endpoint" s3api head-bucket --bucket "$bucket"; \
+      "$awslim_bin" s3 create-bucket "{\"Bucket\":\"$bucket\"}" >/dev/null 2>&1 || true; \
+      "$awslim_bin" s3 head-bucket "{\"Bucket\":\"$bucket\"}" --api-output=false; \
       echo "bucket ready: $bucket at $endpoint"'
+
+rustfs-up: s3-rustfs-up s3-rustfs-mk-bucket
 
 run-native-rustfs:
     @bash -ceu 'set -euo pipefail; \
+      export AWSLIM_S3_BIN="${AWSLIM_S3_BIN:-{{awslim_s3_bin}}}"; \
+      if [[ ! -x "$AWSLIM_S3_BIN" ]]; then \
+        echo "awslim-s3 binary is required: $AWSLIM_S3_BIN"; \
+        exit 2; \
+      fi; \
       export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-{{rustfs_access_key}}}"; \
       export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-{{rustfs_secret_key}}}"; \
-      export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"; \
+      export AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"; \
+      export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-$AWS_REGION}"; \
       export S3_ENDPOINT_URL="${S3_ENDPOINT_URL:-{{rustfs_endpoint}}}"; \
+      export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$S3_ENDPOINT_URL}"; \
       export S3_BUCKET="${S3_BUCKET:-{{rustfs_bucket}}}"; \
       export S3_PREFIX="${S3_PREFIX:-direct4b}"; \
       export AIRLOCK_ATTACHMENT_UPLOAD_CMD="./src/cmd/it_support_app/scripts/upload_to_s3_compatible.sh"; \

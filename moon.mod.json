@@ -2,7 +2,7 @@
   "name": "airlock/airlock",
   "version": "0.1.0",
   "deps": {
-    "f4ah6o/direct_sdk": "0.10.1",
+    "f4ah6o/direct_sdk": "0.11.0",
     "f4ah6o/tmpx": "0.4.0",
     "moonbitlang/async": "0.16.6",
     "moonbitlang/x": "0.4.40",

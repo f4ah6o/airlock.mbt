@@ -10,8 +10,13 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required" >&2
   exit 2
 fi
-if ! command -v aws >/dev/null 2>&1; then
-  echo "aws cli is required" >&2
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AIRLOCK_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+DEFAULT_AWSLIM_S3_BIN="$AIRLOCK_ROOT/../awslim/awslim-s3"
+AWSLIM_S3_BIN="${AWSLIM_S3_BIN:-$DEFAULT_AWSLIM_S3_BIN}"
+if [[ ! -x "$AWSLIM_S3_BIN" ]]; then
+  echo "awslim-s3 binary not found or not executable: $AWSLIM_S3_BIN" >&2
   exit 2
 fi
 
@@ -20,11 +25,13 @@ S3_BUCKET="${S3_BUCKET:-airlock-attachments}"
 S3_PREFIX="${S3_PREFIX:-direct4b}"
 AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-rustfsadmin}"
 AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-rustfsadmin}"
-AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 
 export AWS_ACCESS_KEY_ID
 export AWS_SECRET_ACCESS_KEY
-export AWS_DEFAULT_REGION
+export AWS_REGION
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-$AWS_REGION}"
+export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$S3_ENDPOINT_URL}"
 
 raw_name="${AIRLOCK_ATTACHMENT_NAME:-attachment.bin}"
 raw_name="${raw_name##*/}"
@@ -50,10 +57,73 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
 
-curl -fsSL "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"
+download_ok=0
+auth_method=""
+last_curl_error=""
+download_url="${AIRLOCK_ATTACHMENT_DOWNLOAD_URL:-${AIRLOCK_ATTACHMENT_URL}}"
+download_headers="${AIRLOCK_ATTACHMENT_DOWNLOAD_HEADERS:-}"
+if [[ -n "$download_headers" ]]; then
+  curl_args=(-fsSL)
+  while IFS= read -r line; do
+    if [[ -n "$line" ]]; then
+      curl_args+=(-H "$line")
+    fi
+  done <<< "$download_headers"
+  if curl "${curl_args[@]}" "$download_url" -o "$tmp_file"; then
+    download_ok=1
+    auth_method="download_auth_headers"
+    echo "downloaded attachment with download-auth headers" >&2
+  else
+    echo "failed to download attachment with download-auth headers" >&2
+    exit 31
+  fi
+fi
+token="${DIRECT4B_API_TOKEN:-${DIRECT_API_TOKEN:-}}"
+if [[ "$download_ok" -ne 1 && -n "$token" ]]; then
+  if curl -fsSL -H "Authorization: Bearer ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+    download_ok=1
+    auth_method="Authorization: Bearer"
+    echo "downloaded attachment with Authorization: Bearer" >&2
+  else
+    last_curl_error="Authorization: Bearer failed"
+  fi
+  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-Auth-Token: ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+    download_ok=1
+    auth_method="X-Auth-Token"
+    echo "downloaded attachment with X-Auth-Token" >&2
+  else
+    if [[ "$download_ok" -ne 1 ]]; then
+      last_curl_error="${last_curl_error}; X-Auth-Token failed"
+    fi
+  fi
+  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-API-Token: ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+    download_ok=1
+    auth_method="X-API-Token"
+    echo "downloaded attachment with X-API-Token" >&2
+  else
+    if [[ "$download_ok" -ne 1 ]]; then
+      last_curl_error="${last_curl_error}; X-API-Token failed"
+      echo "token auth download failed for Direct4B attachment URL (${last_curl_error#; })" >&2
+    fi
+  fi
+fi
+if [[ "$download_ok" -ne 1 ]]; then
+  if ! curl -fsSL "$download_url" -o "$tmp_file"; then
+    echo "failed to download attachment URL without auth; set DIRECT4B_API_TOKEN if protected." >&2
+    exit 31
+  fi
+  echo "downloaded attachment without token auth" >&2
+else
+  echo "download auth method: ${auth_method}" >&2
+fi
 
 object_key="${S3_PREFIX}/${safe_platform}/${date_path}/${safe_external_id}-${stamp}-${safe_name}"
-s3_uri="s3://${S3_BUCKET}/${object_key}"
-aws --endpoint-url "${S3_ENDPOINT_URL}" s3 cp "$tmp_file" "$s3_uri" >/dev/null
+if ! "$AWSLIM_S3_BIN" s3 put-object \
+  "{\"Bucket\":\"${S3_BUCKET}\",\"Key\":\"${object_key}\"}" \
+  --input-stream "$tmp_file" \
+  --api-output=false >/dev/null; then
+  echo "failed to upload object to S3 compatible storage: s3://${S3_BUCKET}/${object_key}" >&2
+  exit 41
+fi
 
 printf '%s/%s/%s\n' "${S3_ENDPOINT_URL%/}" "${S3_BUCKET}" "${object_key}"

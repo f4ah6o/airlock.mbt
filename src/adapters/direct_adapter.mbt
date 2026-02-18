@@ -130,6 +130,64 @@ fn json_get_array(
 }
 
 ///|
+fn json_get_value(
+  obj : Map[String, @direct_types.JsonValue],
+  key : String,
+) -> @direct_types.JsonValue? {
+  obj.get(key)
+}
+
+///|
+fn clip_text(text : String, limit? : Int = 180) -> String {
+  let max_len = if limit <= 0 { 180 } else { limit }
+  if text.length() <= max_len {
+    return text
+  }
+  let sb = StringBuilder::new(size_hint=max_len + 3)
+  for i in 0..<max_len {
+    sb.write_char(text[i].unsafe_to_char())
+  }
+  sb.write_string("...")
+  sb.to_string()
+}
+
+///|
+fn parse_download_auth_value(
+  value : @direct_types.JsonValue,
+) -> Result[DownloadAuth, AdapterError] {
+  let obj = match value {
+    @direct_types.JsonObject(o) => o
+    _ => return Err(UnknownError("create_download_auth response is not object"))
+  }
+  let url = {
+    let get_url = json_get_string(obj, "get_url")
+    if get_url != "" {
+      get_url
+    } else {
+      json_get_string(obj, "url")
+    }
+  }
+  let headers : Map[String, String] = {}
+  match obj.get("get_headers") {
+    Some(@direct_types.JsonObject(hs)) =>
+      for kv in hs {
+        let header_val = match json_string(kv.1) {
+          Some(v) => v
+          None => ""
+        }
+        if kv.0 != "" && header_val != "" {
+          headers.set(kv.0, header_val)
+        }
+      }
+    _ => ()
+  }
+  if url == "" {
+    return Err(UnknownError("create_download_auth response missing url"))
+  }
+  Ok({ url, headers })
+}
+
+///|
 fn json_array_to_strings(arr : Array[@direct_types.JsonValue]) -> Array[String] {
   let out : Array[String] = []
   for item in arr {
@@ -200,6 +258,88 @@ fn merge_content_object(
 }
 
 ///|
+fn message_object_from_notify_payload(
+  data : @direct_types.JsonValue,
+) -> Map[String, @direct_types.JsonValue]? {
+  match data {
+    @direct_types.JsonObject(obj) =>
+      match json_get_value(obj, "message") {
+        Some(@direct_types.JsonObject(inner)) => Some(inner)
+        _ => Some(obj)
+      }
+    @direct_types.JsonArray(arr) =>
+      if !arr.is_empty() {
+        message_object_from_notify_payload(arr[0])
+      } else {
+        None
+      }
+    _ => None
+  }
+}
+
+///|
+fn received_message_from_notify_payload(
+  data : @direct_types.JsonValue,
+) -> @direct_types.ReceivedMessage? {
+  let obj = match message_object_from_notify_payload(data) {
+    Some(v) => v
+    None => return None
+  }
+  let id = {
+    let message_id = json_get_string(obj, "message_id")
+    if message_id != "" {
+      message_id
+    } else {
+      json_get_string(obj, "id")
+    }
+  }
+  if id == "" {
+    return None
+  }
+  let talk_id = {
+    let t = json_get_string(obj, "talk_id")
+    if t != "" {
+      t
+    } else {
+      json_get_string(obj, "room_id")
+    }
+  }
+  let content = match json_get_value(obj, "content") {
+    Some(v) => v
+    None => @direct_types.JsonNull
+  }
+  let text = match content {
+    @direct_types.JsonString(s) => s
+    @direct_types.JsonObject(content_obj) => json_get_string(content_obj, "text")
+    _ => ""
+  }
+  let msg_type = match json_get_int(obj, "type") {
+    Some(v) =>
+      match @direct_types.wire_to_msg_type(v) {
+        Some(t) => t
+        None => @direct_types.MsgTypeText
+      }
+    None => @direct_types.MsgTypeText
+  }
+  let created = match json_get_int(obj, "created") {
+    Some(v) => v.to_int64()
+    None => 0L
+  }
+  Some({
+    id,
+    talk_id,
+    room_id: talk_id,
+    user_id: json_get_string(obj, "user_id"),
+    domain_id: json_get_string(obj, "domain_id"),
+    text,
+    msg_type,
+    content,
+    created,
+    raw: Some(data),
+  })
+}
+
+///|
 fn attachment_type_from_mime(mime_or_type : String) -> @shared.AttachmentType {
   let lower = mime_or_type.to_lower()
   if starts_with(lower, "image/") {
@@ -218,17 +358,19 @@ fn attachment_type_from_mime(mime_or_type : String) -> @shared.AttachmentType {
 fn parse_attachment_object(
   obj : Map[String, @direct_types.JsonValue],
 ) -> @shared.Attachment? {
-  let file_id = {
-    let v1 = json_get_string(obj, "file_id")
-    if v1 != "" {
-      v1
-    } else {
-      json_get_string(obj, "id")
-    }
+  let mut file_id = json_get_string(obj, "file_id")
+  if file_id == "" {
+    file_id = json_get_string(obj, "id")
   }
   let mut name = json_get_string(obj, "name")
   if name == "" {
     name = json_get_string(obj, "file_name")
+  }
+  if name == "" {
+    name = json_get_string(obj, "filename")
+  }
+  if name == "" {
+    name = json_get_string(obj, "attachment_name")
   }
   let mut mime = json_get_string(obj, "mime_type")
   if mime == "" {
@@ -237,12 +379,21 @@ fn parse_attachment_object(
   if mime == "" {
     mime = json_get_string(obj, "type")
   }
+  if mime == "" {
+    mime = json_get_string(obj, "attachment_content_type")
+  }
   let mut url = json_get_string(obj, "url")
+  if url == "" {
+    url = json_get_string(obj, "get_url")
+  }
   if url == "" {
     url = json_get_string(obj, "download_url")
   }
-  if url == "" && file_id != "" {
-    url = "direct://file/" + file_id
+  if url == "" {
+    url = json_get_string(obj, "attachment_url")
+  }
+  if url == "" {
+    url = json_get_string(obj, "file_url")
   }
   if name == "" {
     name = if file_id == "" { "attachment" } else { "file-" + file_id }
@@ -480,12 +631,59 @@ pub fn DirectAdapter::listen_incoming(
   self : DirectAdapter,
   handler : (NormalizedMessage) -> Unit,
 ) -> Unit {
+  @rpc_client.on(self.client, @direct_constants.EVENT_SESSION_CREATED, fn(_) {
+    println("direct session created")
+  })
+  @rpc_client.on(self.client, @direct_constants.EVENT_SESSION_ERROR, fn(data) {
+    println("direct session error: " + clip_text(data.to_string()))
+  })
+  @rpc_client.on(self.client, @direct_constants.EVENT_NOTIFICATION_ERROR, fn(data) {
+    println("direct notification error: " + clip_text(data.to_string()))
+  })
+  @rpc_client.on(self.client, @direct_constants.EVENT_DECODE_ERROR, fn(data) {
+    println("direct decode error: " + clip_text(data.to_string()))
+  })
   @rpc_client.on_message(self.client, fn(message) {
     let normalized = direct_message_to_normalized(self.config, message)
     if should_ignore_message(self.config, normalized) {
+      println(
+        "direct inbound ignored(on_message): id=\{normalized.external_id} sender=\{normalized.sender_id}",
+      )
       return
     }
+    println(
+      "direct inbound received(on_message): id=\{normalized.external_id} channel=\{normalized.channel_id} sender=\{normalized.sender_id}",
+    )
     handler(normalized)
+  })
+  @rpc_client.on(self.client, "notify_create_message", fn(data) {
+    println(
+      "direct raw event: notify_create_message payload=\{clip_text(data.to_string())}",
+    )
+    match received_message_from_notify_payload(data) {
+      Some(message) => {
+        let normalized = direct_message_to_normalized(self.config, message)
+        if should_ignore_message(self.config, normalized) {
+          println(
+            "direct inbound ignored(raw): id=\{normalized.external_id} sender=\{normalized.sender_id}",
+          )
+          return
+        }
+        println(
+          "direct inbound received(raw): id=\{normalized.external_id} channel=\{normalized.channel_id} sender=\{normalized.sender_id}",
+        )
+        handler(normalized)
+      }
+      None =>
+        println(
+          "direct raw event parse skipped: payload=\{clip_text(data.to_string())}",
+        )
+    }
+  })
+  @rpc_client.on(self.client, "notify_create_attachment", fn(data) {
+    println(
+      "direct raw event: notify_create_attachment payload=\{clip_text(data.to_string())}",
+    )
   })
 }
 
@@ -496,10 +694,29 @@ pub async fn DirectAdapter::connect(
   tasks : @async.TaskGroup[Unit],
 ) -> Result[Unit, AdapterError] {
   self.state = AdapterState::Connecting
+  println("direct connect: open websocket")
   match @rpc_client.connect(self.client, tasks) {
     Ok(_) => {
-      self.state = AdapterState::Connected
-      Ok(())
+      // direct_sdk connect returns before create_session completes.
+      // Wait briefly for authenticated session to avoid false "connected" state.
+      println("direct connect: websocket ok, waiting session auth")
+      for _ in 0..<80 {
+        if @rpc_client.is_authenticated(self.client) {
+          self.state = AdapterState::Connected
+          println("direct connect: authenticated")
+          return Ok(())
+        }
+        @async.sleep(100)
+      }
+      self.state = AdapterState::Error("session not authenticated")
+      println(
+        "direct connect: auth timeout connected=\{ @rpc_client.is_connected(self.client).to_string() } authenticated=\{ @rpc_client.is_authenticated(self.client).to_string() }",
+      )
+      Err(
+        AuthenticationError(
+          "session not authenticated (token invalid/expired or login failed)",
+        ),
+      )
     }
     Err(e) => {
       self.state = AdapterState::Error(@direct_errors.direct_error_to_string(e))
@@ -581,6 +798,61 @@ pub async fn DirectAdapter::fetch_known_user_names(
       Some(err) => Err(err)
       None => Err(UnknownError("failed to fetch direct user names"))
     }
+  }
+}
+
+pub async fn DirectAdapter::create_download_auth(
+  self : DirectAdapter,
+  file_id : String,
+  talk_id? : String = "",
+  message_id? : String = "",
+) -> Result[DownloadAuth, AdapterError] {
+  if file_id == "" || talk_id == "" || message_id == "" {
+    return Err(
+      UnknownError("talk_id, message_id, file_id are required"),
+    )
+  }
+  let result = @direct_files.create_download_auth(
+    self.client,
+    @direct_types.string_to_id(talk_id),
+    @direct_types.string_to_id(message_id),
+    @direct_types.string_to_id(file_id),
+  )
+  match result {
+    Ok(auth) => Ok({ url: auth.url, headers: auth.headers })
+    Err(err) =>
+      match err {
+        @direct_errors.RPCError(400, _) => {
+          let params : Array[Array[@direct_types.JsonValue]] = [
+            [
+              @direct_types.JsonString(talk_id),
+              @direct_types.JsonString(message_id),
+              @direct_types.JsonString(file_id),
+            ],
+            [
+              @direct_types.JsonString(message_id),
+              @direct_types.JsonString(talk_id),
+              @direct_types.JsonString(file_id),
+            ],
+          ]
+          for p in params {
+            match @rpc_client.call(
+              self.client,
+              @direct_constants.METHOD_CREATE_DOWNLOAD_AUTH,
+              p,
+            ) {
+              Ok(value) =>
+                match parse_download_auth_value(value) {
+                  Ok(auth) => return Ok(auth)
+                  Err(_) => ()
+                }
+              Err(_) => ()
+            }
+          }
+          Err(direct_error_to_adapter_error(err))
+        }
+        _ => Err(direct_error_to_adapter_error(err))
+      }
   }
 }
 

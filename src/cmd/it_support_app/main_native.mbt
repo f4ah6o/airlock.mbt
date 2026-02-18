@@ -196,6 +196,53 @@ fn parse_form(body : String) -> Map[String, String] {
 }
 
 ///|
+fn url_encode_component(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length() + 16)
+  for c in text {
+    let code = c.to_int()
+    let is_alpha_num = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122)
+    let is_safe = is_alpha_num || c == '-' || c == '_' || c == '.' || c == '~'
+    if is_safe {
+      sb.write_char(c)
+    } else {
+      sb.write_char('%')
+      let hi = (code / 16) & 0xF
+      let lo = code & 0xF
+      sb.write_char(if hi < 10 { Int::unsafe_to_char(48 + hi) } else { Int::unsafe_to_char(65 + hi - 10) })
+      sb.write_char(if lo < 10 { Int::unsafe_to_char(48 + lo) } else { Int::unsafe_to_char(65 + lo - 10) })
+    }
+  }
+  sb.to_string()
+}
+
+///|
+fn query_string(uri : String) -> String {
+  let mut q_idx : Int? = None
+  for i in 0..<uri.length() {
+    if uri[i] == '?' {
+      q_idx = Some(i)
+      break
+    }
+  }
+  match q_idx {
+    None => ""
+    Some(idx) => {
+      let sb = StringBuilder::new(size_hint=uri.length() - idx - 1)
+      for i in (idx + 1)..<uri.length() {
+        sb.write_char(uri[i].unsafe_to_char())
+      }
+      sb.to_string()
+    }
+  }
+}
+
+///|
+fn parse_query(uri : String) -> Map[String, String] {
+  parse_form(query_string(uri))
+}
+
+///|
 fn split_path(path : String) -> Array[String] {
   let result : Array[String] = []
   let mut current = ""
@@ -282,6 +329,11 @@ struct AppState {
   outbound_echo_counts : Ref[Map[String, Int]]
   direct_user_name_cache : Ref[Map[String, String]]
   direct_user_names_loaded : Ref[Bool]
+  direct_api_token : Ref[String]
+  direct_attachment_host : Ref[String]
+  s3_endpoint_url : Ref[String]
+  awslim_s3_bin : Ref[String]
+  attachment_proxy_map : Ref[Map[String, String]]
   attachment_upload_cmd : Ref[String]
 }
 
@@ -339,6 +391,11 @@ fn seed_state() -> AppState {
     outbound_echo_counts: { val: {} },
     direct_user_name_cache: { val: {} },
     direct_user_names_loaded: { val: false },
+    direct_api_token: { val: "" },
+    direct_attachment_host: { val: "api.direct4b.com" },
+    s3_endpoint_url: { val: "http://127.0.0.1:9000" },
+    awslim_s3_bin: { val: "../awslim/awslim-s3" },
+    attachment_proxy_map: { val: {} },
     attachment_upload_cmd: { val: "" },
   }
 }
@@ -465,8 +522,11 @@ async fn maintain_direct_bridge_loop(
   ingest_ctx : @core.IngestContext,
   tasks : @async.TaskGroup[Unit],
 ) -> Unit {
+  let mut retry_seq = 0
   while true {
     if state.direct_adapter.val is None && !state.direct_bridge_connecting.val {
+      retry_seq = retry_seq + 1
+      println("direct bridge retry: seq=\{retry_seq.to_string()}")
       state.direct_bridge_connecting.val = true
       try_start_direct_bridge(state, ingest_ctx, tasks)
       state.direct_bridge_connecting.val = false
@@ -529,6 +589,25 @@ fn build_response(
 }
 
 ///|
+fn binary_response(
+  status : Int,
+  reason : String,
+  body : Array[Byte],
+  content_type : String,
+  content_disposition? : String = "",
+) -> @http.Response {
+  let resp = @http.Response::new(status, reason)
+  .header("Content-Type", content_type)
+  .header("Content-Length", body.length().to_string())
+  .header("Connection", "close")
+  if content_disposition != "" {
+    resp.header("Content-Disposition", content_disposition).body(body)
+  } else {
+    resp.body(body)
+  }
+}
+
+///|
 fn html_response(body : String) -> @http.Response {
   build_response(200, "OK", body, "text/html; charset=utf-8")
 }
@@ -545,6 +624,16 @@ fn html_error_response(
 ///|
 fn not_found_response() -> @http.Response {
   build_response(404, "Not Found", "404 Not Found", "text/plain; charset=utf-8")
+}
+
+///|
+fn forbidden_response(msg : String) -> @http.Response {
+  build_response(403, "Forbidden", msg, "text/plain; charset=utf-8")
+}
+
+///|
+fn bad_gateway_response(msg : String) -> @http.Response {
+  build_response(502, "Bad Gateway", msg, "text/plain; charset=utf-8")
 }
 
 ///|
@@ -713,32 +802,9 @@ fn full_page_response(
 }
 
 ///|
-fn merge_direct_user_name_cache(
-  state : AppState,
-  names : Array[(String, String)],
-) -> Unit {
-  for entry in names {
-    let (user_id, name) = entry
-    if user_id != "" && name != "" {
-      state.direct_user_name_cache.val.set(user_id, name)
-    }
-  }
-}
-
-///|
-async fn try_load_direct_user_names_once(state : AppState) -> Unit {
-  if state.direct_user_names_loaded.val {
-    return
-  }
-  let adapter = match state.direct_adapter.val {
-    Some(a) => a
-    None => return
-  }
+fn try_load_direct_user_names_once(state : AppState) -> Unit {
+  // Scope out user-name lookup for now.
   state.direct_user_names_loaded.val = true
-  match adapter.fetch_known_user_names() {
-    Ok(names) => merge_direct_user_name_cache(state, names)
-    Err(err) => println("direct user name fetch failed: \{err.to_string()}")
-  }
 }
 
 ///|
@@ -760,7 +826,7 @@ fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
 }
 
 ///|
-async fn ensure_ticket_open_context(
+fn ensure_ticket_open_context(
   state : AppState,
   ticket_id : String,
 ) -> Unit {
@@ -781,9 +847,309 @@ fn is_mhx_request(request : @http.Request) -> Bool {
 }
 
 ///|
-async fn handle_get(state : AppState, path : String) -> @http.Response {
+fn trim_trailing_slash(url : String) -> String {
+  if url.length() > 0 && url[url.length() - 1] == '/' {
+    let sb = StringBuilder::new(size_hint=url.length() - 1)
+    for i in 0..<(url.length() - 1) {
+      sb.write_char(url[i].unsafe_to_char())
+    }
+    sb.to_string()
+  } else {
+    url
+  }
+}
+
+///|
+fn url_host(url : String) -> String {
+  let mut scheme_end = -1
+  let mut i = 0
+  while i + 2 < url.length() {
+    if url[i] == ':' && url[i + 1] == '/' && url[i + 2] == '/' {
+      scheme_end = i + 3
+      break
+    }
+    i = i + 1
+  }
+  if scheme_end < 0 || scheme_end >= url.length() {
+    return ""
+  }
+  let mut end = url.length()
+  for j in scheme_end..<url.length() {
+    if url[j] == '/' || url[j] == '?' || url[j] == '#' {
+      end = j
+      break
+    }
+  }
+  if end <= scheme_end {
+    return ""
+  }
+  let authority = substring(url, scheme_end, end)
+  for k in 0..<authority.length() {
+    if authority[k] == ':' {
+      if k == 0 {
+        return ""
+      }
+      return substring(authority, 0, k)
+    }
+  }
+  authority
+}
+
+///|
+fn json_escape(s : String) -> String {
+  let sb = StringBuilder::new(size_hint=s.length() + 8)
+  for c in s {
+    if c == '\\' {
+      sb.write_string("\\\\")
+    } else if c == '"' {
+      sb.write_string("\\\"")
+    } else {
+      sb.write_char(c)
+    }
+  }
+  sb.to_string()
+}
+
+///|
+fn is_allowed_proxy_url(state : AppState, url : String) -> Bool {
+  let host = url_host(url)
+  if host != "" &&
+    (host == "api.direct4b.com" || host == state.direct_attachment_host.val) {
+    return true
+  }
+  let endpoint = trim_trailing_slash(state.s3_endpoint_url.val)
+  if endpoint != "" && has_prefix(url, endpoint + "/") {
+    return true
+  }
+  false
+}
+
+fn substring(text : String, start : Int, end_ : Int) -> String {
+  let sb = StringBuilder::new(size_hint=end_ - start)
+  for i in start..<end_ {
+    sb.write_char(text[i].unsafe_to_char())
+  }
+  sb.to_string()
+}
+
+///|
+fn clip_for_error(text : String, limit? : Int = 220) -> String {
+  let max_len = if limit <= 0 { 220 } else { limit }
+  if text.length() <= max_len {
+    return text
+  }
+  substring(text, 0, max_len) + "..."
+}
+
+///|
+fn sanitize_filename(name : String) -> String {
+  let trimmed = name.trim().to_string()
+  if trimmed == "" {
+    return ""
+  }
+  let sb = StringBuilder::new(size_hint=trimmed.length())
+  for c in trimmed {
+    if c == '/' || c == '\\' || c == '"' || c == '\n' || c == '\r' || c == '\t' {
+      sb.write_char('_')
+    } else {
+      sb.write_char(c)
+    }
+  }
+  sb.to_string()
+}
+
+///|
+fn content_disposition_for_download(name : String) -> String {
+  let safe = sanitize_filename(name)
+  if safe == "" {
+    ""
+  } else {
+    "attachment; filename=\"" + safe + "\""
+  }
+}
+
+///|
+async fn fetch_direct_attachment_bytes(
+  state : AppState,
+  url : String,
+) -> Result[Array[Byte], String] {
+  let token = state.direct_api_token.val
+  if token != "" {
+    let url_with_auth = if (
+        (has_prefix(url, "https://api.direct4b.com/") ||
+          has_prefix(url, "http://api.direct4b.com/")) &&
+        !contains_text(url, "Authorization=")
+      ) {
+      let separator = if contains_text(url, "?") { "&" } else { "?" }
+      url + separator + "Authorization=ALB%20" + token
+    } else {
+      url
+    }
+    let (exit_code, out, err) = @process.collect_output(
+      "curl",
+      ["-fsSL", url_with_auth],
+    )
+    if exit_code == 0 {
+      return Ok(out.binary().to_array())
+    }
+    let err_text_result = try? err.text()
+    let err_text = match err_text_result {
+      Ok(v) => clip_for_error(v.trim().to_string())
+      Err(_) => "stderr unreadable"
+    }
+    println(
+      "direct attachment fetch failed with ALB query auth: exit=\{exit_code.to_string()} err=\{err_text}",
+    )
+    for header in [
+      "Authorization: Bearer " + token,
+      "X-Auth-Token: " + token,
+      "X-API-Token: " + token,
+    ] {
+      let (exit_code, out, err) = @process.collect_output(
+        "curl",
+        ["-fsSL", "-H", header, url],
+      )
+      if exit_code == 0 {
+        return Ok(out.binary().to_array())
+      }
+      let err_text_result = try? err.text()
+      let err_text = match err_text_result {
+        Ok(v) => clip_for_error(v.trim().to_string())
+        Err(_) => "stderr unreadable"
+      }
+      println(
+        "direct attachment fetch failed with token header (\{clip_for_error(header, limit=48)}): exit=\{exit_code.to_string()} err=\{err_text}",
+      )
+    }
+  }
+  let (exit_code, out, err) = @process.collect_output("curl", ["-fsSL", url])
+  if exit_code == 0 {
+    Ok(out.binary().to_array())
+  } else {
+    let err_text_result = try? err.text()
+    let err_text = match err_text_result {
+      Ok(v) => clip_for_error(v.trim().to_string())
+      Err(_) => "stderr unreadable"
+    }
+    Err(
+      "failed to fetch direct attachment (exit=\{exit_code.to_string()}, err=\{err_text})",
+    )
+  }
+}
+
+///|
+async fn fetch_s3_object_bytes(
+  state : AppState,
+  url : String,
+) -> Result[Array[Byte], String] {
+  let endpoint = trim_trailing_slash(state.s3_endpoint_url.val)
+  if !has_prefix(url, endpoint + "/") {
+    return Err("not an allowed s3 endpoint")
+  }
+  let object_url = substring(url, endpoint.length() + 1, url.length())
+  let mut slash_opt : Int? = None
+  for i in 0..<object_url.length() {
+    if object_url[i] == '/' {
+      slash_opt = Some(i)
+      break
+    }
+  }
+  let slash = match slash_opt {
+    Some(v) => v
+    None => return Err("invalid s3 object url")
+  }
+  if slash <= 0 || slash >= object_url.length() - 1 {
+    return Err("invalid s3 object url")
+  }
+  let bucket = substring(object_url, 0, slash)
+  let key = substring(object_url, slash + 1, object_url.length())
+  let input_json = "{\"Bucket\":\"" +
+    json_escape(bucket) +
+    "\",\"Key\":\"" +
+    json_escape(key) +
+    "\"}"
+  let (exit_code, out) = @process.collect_stdout(
+    state.awslim_s3_bin.val,
+    ["s3", "get-object", input_json, "--output-stream", "-", "--api-output=false"],
+  )
+  if exit_code == 0 {
+    Ok(out.binary().to_array())
+  } else {
+    Err("failed to fetch s3 object")
+  }
+}
+
+///|
+async fn handle_attachment_proxy(
+  state : AppState,
+  uri : String,
+) -> @http.Response {
+  let query = parse_query(uri)
+  let target_url = match query.get("url") {
+    Some(v) => v
+    None => return build_response(
+      400,
+      "Bad Request",
+      "missing url query parameter",
+      "text/plain; charset=utf-8",
+    )
+  }
+  let download_name = match query.get("name") {
+    Some(v) => sanitize_filename(v)
+    None => ""
+  }
+  let content_disposition = content_disposition_for_download(download_name)
+  if !is_allowed_proxy_url(state, target_url) {
+    return forbidden_response("url is not allowed")
+  }
+  let target_host = url_host(target_url)
+  let is_direct_attachment = target_host == "api.direct4b.com" ||
+    target_host == state.direct_attachment_host.val
+  if is_direct_attachment {
+    match state.attachment_proxy_map.val.get(target_url) {
+      Some(mapped_url) => {
+        match fetch_s3_object_bytes(state, mapped_url) {
+          Ok(body) => return binary_response(
+            200,
+            "OK",
+            body,
+            "application/octet-stream",
+            content_disposition=content_disposition,
+          )
+          Err(err_msg) =>
+            println(
+              "mapped s3 fetch failed for direct attachment: \{clip_for_error(err_msg)}",
+            )
+        }
+      }
+      None => ()
+    }
+  }
+  let fetched = if is_direct_attachment {
+    fetch_direct_attachment_bytes(state, target_url)
+  } else {
+    fetch_s3_object_bytes(state, target_url)
+  }
+  match fetched {
+    Ok(body) => binary_response(
+      200,
+      "OK",
+      body,
+      "application/octet-stream",
+      content_disposition=content_disposition,
+    )
+    Err(msg) => bad_gateway_response(msg)
+  }
+}
+
+///|
+async fn handle_get(state : AppState, uri : String) -> @http.Response {
+  let path = path_only(uri)
   if path == "/" {
     return full_page_response(state, None)
+  }
+  if path == "/attachments/proxy" {
+    return handle_attachment_proxy(state, uri)
   }
   if path == "/events" {
     return build_response(
@@ -1227,7 +1593,7 @@ async fn build_response_for_request(
   let path = path_only(request.uri)
   let mhx_request = is_mhx_request(request)
   match request.http_method {
-    "GET" => handle_get(state, path)
+    "GET" => handle_get(state, request.uri)
     "POST" => handle_post(state, path, request.body, mhx_request)
     _ =>
       build_response(405, "Method Not Allowed", "", "text/plain; charset=utf-8")
@@ -1282,6 +1648,29 @@ fn has_prefix(text : String, prefix : String) -> Bool {
     }
   }
   true
+}
+
+///|
+fn contains_text(text : String, pattern : String) -> Bool {
+  if pattern == "" {
+    return true
+  }
+  if text.length() < pattern.length() {
+    return false
+  }
+  for start in 0..<(text.length() - pattern.length() + 1) {
+    let mut matched = true
+    for i in 0..<pattern.length() {
+      if text[start + i] != pattern[i] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return true
+    }
+  }
+  false
 }
 
 ///|
@@ -1344,14 +1733,19 @@ async fn env_value(name : String) -> String {
 ///|
 async fn read_direct_startup_config() -> DirectStartupConfig {
   let args = @env.args()
-  let token_from_env = env_value("DIRECT4B_API_TOKEN")
+  let token_from_env_primary = env_value("DIRECT4B_API_TOKEN")
+  let token_from_env_hubot = env_value("HUBOT_DIRECT_TOKEN")
   let bot_user_id_from_env = env_value("DIRECT4B_BOT_USER_ID")
   let platform_from_env = env_value("DIRECT4B_PLATFORM")
-  let endpoint_from_env = env_value("DIRECT4B_ENDPOINT")
-  let proxy_url_from_env = env_value("DIRECT4B_PROXY_URL")
+  let endpoint_from_env_primary = env_value("DIRECT4B_ENDPOINT")
+  let endpoint_from_env_hubot = env_value("HUBOT_DIRECT_ENDPOINT")
+  let proxy_url_from_env_primary = env_value("DIRECT4B_PROXY_URL")
+  let proxy_url_from_env_hubot = env_value("HUBOT_DIRECT_PROXY_URL")
 
-  let token = if token_from_env != "" {
-    token_from_env
+  let token = if token_from_env_primary != "" {
+    token_from_env_primary
+  } else if token_from_env_hubot != "" {
+    token_from_env_hubot
   } else {
     match arg_value(args, "direct-token") {
       Some(v) => v
@@ -1374,16 +1768,20 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
       None => "direct4b"
     }
   }
-  let endpoint = if endpoint_from_env != "" {
-    endpoint_from_env
+  let endpoint = if endpoint_from_env_primary != "" {
+    endpoint_from_env_primary
+  } else if endpoint_from_env_hubot != "" {
+    endpoint_from_env_hubot
   } else {
     match arg_value(args, "direct-endpoint") {
       Some(v) => v
       None => ""
     }
   }
-  let proxy_url = if proxy_url_from_env != "" {
-    proxy_url_from_env
+  let proxy_url = if proxy_url_from_env_primary != "" {
+    proxy_url_from_env_primary
+  } else if proxy_url_from_env_hubot != "" {
+    proxy_url_from_env_hubot
   } else {
     match arg_value(args, "direct-proxy-url") {
       Some(v) => v
@@ -1437,13 +1835,19 @@ async fn upload_attachment_url_with_hook(
   if command == "" || attachment.url == "" {
     return None
   }
+  let source_url = attachment.url
   let envs : Map[String, String] = {}
-  envs.set("AIRLOCK_ATTACHMENT_URL", attachment.url)
+  envs.set("AIRLOCK_ATTACHMENT_URL", source_url)
+  envs.set("AIRLOCK_ATTACHMENT_DOWNLOAD_URL", source_url)
   envs.set("AIRLOCK_ATTACHMENT_NAME", attachment.name)
   envs.set("AIRLOCK_ATTACHMENT_TYPE", attachment.attachment_type.to_string())
   envs.set("AIRLOCK_MESSAGE_EXTERNAL_ID", normalized.external_id)
   envs.set("AIRLOCK_CHANNEL_ID", normalized.channel_id)
   envs.set("AIRLOCK_PLATFORM", normalized.platform)
+  if state.direct_api_token.val != "" {
+    envs.set("DIRECT4B_API_TOKEN", state.direct_api_token.val)
+    envs.set("DIRECT_API_TOKEN", state.direct_api_token.val)
+  }
   let (exit_code, stdout) = @process.collect_stdout(
     "sh",
     ["-c", command],
@@ -1478,14 +1882,33 @@ async fn rewrite_attachment_urls(
   let attachment_lines : Array[String] = []
   let mut failed = 0
   for attachment in normalized.attachments {
+    let original_url = attachment.url
     let final_attachment = match
       upload_attachment_url_with_hook(state, normalized, attachment) {
-      Some(url) => @shared.Attachment::{ ..attachment, url, }
+      Some(url) => {
+        if has_prefix(
+          original_url,
+          "https://api.direct4b.com/albero-app-server/files/",
+        ) {
+          state.attachment_proxy_map.val.set(original_url, url)
+        }
+        @shared.Attachment::{ ..attachment, url, }
+      }
       None => {
         if hook_enabled {
           failed = failed + 1
         }
-        attachment
+        if original_url != "" {
+          @shared.Attachment::{
+            ..attachment,
+            url: "/attachments/proxy?url=" +
+              url_encode_component(original_url) +
+              "&name=" +
+              url_encode_component(attachment.name),
+          }
+        } else {
+          attachment
+        }
       }
     }
     rewritten.push(final_attachment)
@@ -1556,6 +1979,14 @@ async fn try_start_direct_bridge(
   tasks : @async.TaskGroup[Unit],
 ) -> Unit {
   let cfg = read_direct_startup_config()
+  println(
+    "direct bridge config: endpoint=\{cfg.endpoint} proxy=\{cfg.proxy_url} token_len=\{cfg.token.length().to_string()} bot_user_id=\{cfg.bot_user_id}",
+  )
+  state.direct_api_token.val = cfg.token
+  let endpoint_host = url_host(cfg.endpoint)
+  if endpoint_host != "" {
+    state.direct_attachment_host.val = endpoint_host
+  }
   if cfg.token == "" || cfg.bot_user_id == "" {
     println(
       "direct bridge disabled: set DIRECT4B_API_TOKEN and DIRECT4B_BOT_USER_ID",
@@ -1580,6 +2011,7 @@ async fn try_start_direct_bridge(
   match adapter.connect(tasks) {
     Ok(_) => {
       state.direct_adapter.val = Some(adapter)
+      state.direct_user_names_loaded.val = false
       println(
         "direct bridge connected (platform=\{cfg.platform}, bot_user_id=\{cfg.bot_user_id})",
       )
@@ -1595,6 +2027,15 @@ async fn main {
   state.dev_mode.val = has_flag(args, "dev")
   if state.dev_mode.val {
     println("dev mode enabled: timeline renders raw_data when available")
+  }
+  state.direct_api_token.val = env_value("DIRECT4B_API_TOKEN")
+  let s3_endpoint = env_value("S3_ENDPOINT_URL")
+  if s3_endpoint != "" {
+    state.s3_endpoint_url.val = s3_endpoint
+  }
+  let awslim_bin = env_value("AWSLIM_S3_BIN")
+  if awslim_bin != "" {
+    state.awslim_s3_bin.val = awslim_bin
   }
   state.attachment_upload_cmd.val = env_value("AIRLOCK_ATTACHMENT_UPLOAD_CMD")
   if state.attachment_upload_cmd.val.trim().to_string() != "" {

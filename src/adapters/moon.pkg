@@ -1,6 +1,8 @@
 import {
   "airlock/airlock/shared",
   "f4ah6o/direct_sdk/config" @direct_config,
+  "f4ah6o/direct_sdk/constants" @direct_constants,
+  "f4ah6o/direct_sdk/api/files" @direct_files,
   "f4ah6o/direct_sdk/api/domains" @direct_domains,
   "f4ah6o/direct_sdk/errors" @direct_errors,
   "f4ah6o/direct_sdk/rpc/client" @rpc_client,

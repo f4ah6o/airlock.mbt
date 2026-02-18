@@ -72,6 +72,96 @@ fn escape_html_text(text : String) -> String {
 }
 
 ///|
+fn substring(text : String, start : Int, end_ : Int) -> String {
+  let sb = StringBuilder::new(size_hint=end_ - start)
+  for i in start..<end_ {
+    sb.write_char(text[i].unsafe_to_char())
+  }
+  sb.to_string()
+}
+
+///|
+fn starts_with_at(text : String, start : Int, prefix : String) -> Bool {
+  if start + prefix.length() > text.length() {
+    return false
+  }
+  for i in 0..<prefix.length() {
+    if text[start + i] != prefix[i] {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn is_url_terminator(ch : UInt16) -> Bool {
+  ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '<' || ch == '>' ||
+  ch == '"' || ch == '\''
+}
+
+///|
+fn url_encode_component(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length() + 16)
+  for c in text {
+    let code = c.to_int()
+    let is_alpha_num = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122)
+    let is_safe = is_alpha_num || c == '-' || c == '_' || c == '.' || c == '~'
+    if is_safe {
+      sb.write_char(c)
+    } else {
+      sb.write_char('%')
+      let hi = (code / 16) & 0xF
+      let lo = code & 0xF
+      sb.write_char(if hi < 10 { Int::unsafe_to_char(48 + hi) } else { Int::unsafe_to_char(65 + hi - 10) })
+      sb.write_char(if lo < 10 { Int::unsafe_to_char(48 + lo) } else { Int::unsafe_to_char(65 + lo - 10) })
+    }
+  }
+  sb.to_string()
+}
+
+///|
+fn render_message_text_with_links(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length() + 64)
+  let mut i = 0
+  let mut plain_start = 0
+  while i < text.length() {
+    let is_http = starts_with_at(text, i, "http://")
+    let is_https = starts_with_at(text, i, "https://")
+    let is_proxy_rel = starts_with_at(text, i, "/attachments/proxy?url=")
+    if is_http || is_https || is_proxy_rel {
+      if plain_start < i {
+        sb.write_string(escape_html_text(substring(text, plain_start, i)))
+      }
+      let mut j = i
+      while j < text.length() && !is_url_terminator(text[j]) {
+        j = j + 1
+      }
+      let url = substring(text, i, j)
+      let proxy_href = if is_proxy_rel {
+        url
+      } else {
+        "/attachments/proxy?url=" + url_encode_component(url)
+      }
+      let escaped = escape_html_text(url)
+      sb.write_string("<a href=\"")
+      sb.write_string(escape_html_text(proxy_href))
+      sb.write_string("\" target=\"_blank\" rel=\"noopener noreferrer\">")
+      sb.write_string(escaped)
+      sb.write_string("</a>")
+      i = j
+      plain_start = j
+    } else {
+      i = i + 1
+    }
+  }
+  if plain_start < text.length() {
+    sb.write_string(escape_html_text(substring(text, plain_start, text.length())))
+  }
+  sb.to_string()
+}
+
+///|
 fn subject_node(subject : String) -> @tmpx.Node {
   @tmpx.raw(escape_html_text(subject))
 }
@@ -298,7 +388,7 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
       ),
       @tmpx.div_parts(
         parts([@tmpx.class_("chat-item__text")], [
-          @tmpx.raw(escape_html_text(message.text)),
+          @tmpx.raw(render_message_text_with_links(message.text)),
         ]),
       ),
     ]),
@@ -320,7 +410,7 @@ fn note_item(
     ),
     @tmpx.div_parts(
       parts([@tmpx.class_("chat-item__text")], [
-        @tmpx.raw(escape_html_text(message.text)),
+        @tmpx.raw(render_message_text_with_links(message.text)),
       ]),
     ),
   ]

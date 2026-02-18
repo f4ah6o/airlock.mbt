@@ -128,6 +128,35 @@ test "direct_message_to_normalized extracts file attachment" {
 }
 
 ///|
+test "direct_message_to_normalized prefers message attachment_url" {
+  let config = AdapterConfig::new("direct", "bot-1", "token")
+  let content = @direct_types.JsonObject(
+    Map::from_array([
+      ("file_id", @direct_types.JsonString("f-2")),
+      ("attachment_name", @direct_types.JsonString("from-attachment-url.pdf")),
+      ("attachment_url", @direct_types.JsonString("https://direct/files/f-2")),
+      ("attachment_content_type", @direct_types.JsonString("application/pdf")),
+    ]),
+  )
+  let message : @direct_types.ReceivedMessage = {
+    id: "msg-6",
+    talk_id: "talk-6",
+    room_id: "room-6",
+    user_id: "user-6",
+    domain_id: "domain-1",
+    text: "",
+    msg_type: @direct_types.MsgTypeFile,
+    content,
+    created: 792L,
+    raw: None,
+  }
+  let normalized = direct_message_to_normalized(config, message)
+  assert_eq(normalized.attachments.length(), 1)
+  assert_eq(normalized.attachments[0].name, "from-attachment-url.pdf")
+  assert_eq(normalized.attachments[0].url, "https://direct/files/f-2")
+}
+
+///|
 test "normalized message converts to inbound message" {
   let normalized = NormalizedMessage::new(
     "ext-1", "direct4b", "room-1", "user-1", "alice", "hello", "2026-02-16T00:00:00Z",

@@ -70,6 +70,12 @@ pub(all) struct OutboundMessage {
 } derive(Show, Eq)
 
 ///|
+pub(all) struct DownloadAuth {
+  url : String
+  headers : Map[String, String]
+} derive(Show, Eq)
+
+///|
 /// Create a new OutboundMessage
 pub fn OutboundMessage::new(
   channel_id : String,
