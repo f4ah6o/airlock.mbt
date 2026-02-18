@@ -4,6 +4,7 @@ pub(all) struct DirectAdapter {
   config : AdapterConfig
   client : @rpc_client.Client
   mut state : AdapterState
+  mut self_user_id : String
 }
 
 ///|
@@ -37,6 +38,7 @@ pub fn DirectAdapter::new(
     config,
     client: @rpc_client.new_client(direct_cfg),
     state: AdapterState::Disconnected,
+    self_user_id: "",
   }
 }
 
@@ -631,6 +633,22 @@ pub fn DirectAdapter::listen_incoming(
   self : DirectAdapter,
   handler : (NormalizedMessage) -> Unit,
 ) -> Unit {
+  fn should_ignore_inbound(
+    adapter : DirectAdapter,
+    normalized : NormalizedMessage,
+  ) -> Bool {
+    if should_ignore_message(adapter.config, normalized) {
+      return true
+    }
+    if adapter.self_user_id != "" && normalized.sender_id == adapter.self_user_id {
+      return true
+    }
+    if adapter.config.bot_user_id != "" &&
+      normalized.sender_name == adapter.config.bot_user_id {
+      return true
+    }
+    false
+  }
   @rpc_client.on(self.client, @direct_constants.EVENT_SESSION_CREATED, fn(_) {
     println("direct session created")
   })
@@ -645,7 +663,7 @@ pub fn DirectAdapter::listen_incoming(
   })
   @rpc_client.on_message(self.client, fn(message) {
     let normalized = direct_message_to_normalized(self.config, message)
-    if should_ignore_message(self.config, normalized) {
+    if should_ignore_inbound(self, normalized) {
       println(
         "direct inbound ignored(on_message): id=\{normalized.external_id} sender=\{normalized.sender_id}",
       )
@@ -663,7 +681,7 @@ pub fn DirectAdapter::listen_incoming(
     match received_message_from_notify_payload(data) {
       Some(message) => {
         let normalized = direct_message_to_normalized(self.config, message)
-        if should_ignore_message(self.config, normalized) {
+        if should_ignore_inbound(self, normalized) {
           println(
             "direct inbound ignored(raw): id=\{normalized.external_id} sender=\{normalized.sender_id}",
           )
@@ -702,6 +720,18 @@ pub async fn DirectAdapter::connect(
       println("direct connect: websocket ok, waiting session auth")
       for _ in 0..<80 {
         if @rpc_client.is_authenticated(self.client) {
+          match @direct_users.get_me(self.client) {
+            Ok(me) => {
+              self.self_user_id = @direct_types.id_to_string(me.id)
+              if self.self_user_id != "" {
+                println("direct connect: resolved self_user_id=" + self.self_user_id)
+              }
+            }
+            Err(err) =>
+              println(
+                "direct connect: failed to resolve self user id: \{@direct_errors.direct_error_to_string(err)}",
+              )
+          }
           self.state = AdapterState::Connected
           println("direct connect: authenticated")
           return Ok(())

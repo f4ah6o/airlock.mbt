@@ -327,12 +327,17 @@ struct AppState {
   direct_bridge_connecting : Ref[Bool]
   outbound_queue : Ref[Array[@adapters.OutboundMessage]]
   outbound_echo_counts : Ref[Map[String, Int]]
+  direct_seen_external_ids : Ref[Map[String, Bool]]
+  direct_seen_external_order : Ref[Array[String]]
   direct_user_name_cache : Ref[Map[String, String]]
   direct_user_names_loaded : Ref[Bool]
   direct_api_token : Ref[String]
   direct_attachment_host : Ref[String]
   s3_endpoint_url : Ref[String]
   awslim_s3_bin : Ref[String]
+  s3_access_key_id : Ref[String]
+  s3_secret_access_key : Ref[String]
+  s3_region : Ref[String]
   attachment_proxy_map : Ref[Map[String, String]]
   attachment_upload_cmd : Ref[String]
 }
@@ -389,12 +394,17 @@ fn seed_state() -> AppState {
     direct_bridge_connecting: { val: false },
     outbound_queue: { val: [] },
     outbound_echo_counts: { val: {} },
+    direct_seen_external_ids: { val: {} },
+    direct_seen_external_order: { val: [] },
     direct_user_name_cache: { val: {} },
     direct_user_names_loaded: { val: false },
     direct_api_token: { val: "" },
     direct_attachment_host: { val: "api.direct4b.com" },
     s3_endpoint_url: { val: "http://127.0.0.1:9000" },
     awslim_s3_bin: { val: "../awslim/awslim-s3" },
+    s3_access_key_id: { val: "rustfsadmin" },
+    s3_secret_access_key: { val: "rustfsadmin" },
+    s3_region: { val: "us-east-1" },
     attachment_proxy_map: { val: {} },
     attachment_upload_cmd: { val: "" },
   }
@@ -441,6 +451,34 @@ fn consume_outbound_echo(
       true
     }
     None => false
+  }
+}
+
+///|
+fn mark_seen_direct_external_id(
+  state : AppState,
+  external_id : String,
+) -> Bool {
+  if external_id == "" {
+    return false
+  }
+  match state.direct_seen_external_ids.val.get(external_id) {
+    Some(_) => true
+    None => {
+      state.direct_seen_external_ids.val.set(external_id, true)
+      state.direct_seen_external_order.val.push(external_id)
+      let max_seen = 2048
+      if state.direct_seen_external_order.val.length() > max_seen {
+        let oldest = state.direct_seen_external_order.val[0]
+        state.direct_seen_external_ids.val.remove(oldest)
+        let next_order : Array[String] = []
+        for i in 1..<state.direct_seen_external_order.val.length() {
+          next_order.push(state.direct_seen_external_order.val[i])
+        }
+        state.direct_seen_external_order.val = next_order
+      }
+      false
+    }
   }
 }
 
@@ -1068,9 +1106,16 @@ async fn fetch_s3_object_bytes(
     "\",\"Key\":\"" +
     json_escape(key) +
     "\"}"
+  let envs : Map[String, String] = {}
+  envs.set("AWS_ACCESS_KEY_ID", state.s3_access_key_id.val)
+  envs.set("AWS_SECRET_ACCESS_KEY", state.s3_secret_access_key.val)
+  envs.set("AWS_REGION", state.s3_region.val)
+  envs.set("AWS_DEFAULT_REGION", state.s3_region.val)
+  envs.set("AWS_ENDPOINT_URL_S3", state.s3_endpoint_url.val)
   let (exit_code, out) = @process.collect_stdout(
     state.awslim_s3_bin.val,
     ["s3", "get-object", input_json, "--output-stream", "-", "--api-output=false"],
+    extra_env=envs,
   )
   if exit_code == 0 {
     Ok(out.binary().to_array())
@@ -1826,6 +1871,34 @@ fn append_lines(base : String, lines : Array[String]) -> String {
 }
 
 ///|
+fn strip_plain_file_lines(
+  base : String,
+  attachments : Array[@shared.Attachment],
+) -> String {
+  if base == "" || attachments.is_empty() {
+    return base
+  }
+  let kept : Array[String] = []
+  for raw_line in base.split("\n") {
+    let line = raw_line.to_string()
+    let trimmed = line.trim().to_string()
+    let mut drop = trimmed == "[file]"
+    if !drop {
+      for attachment in attachments {
+        if trimmed == "[file] " + attachment.name {
+          drop = true
+          break
+        }
+      }
+    }
+    if !drop {
+      kept.push(line)
+    }
+  }
+  kept.join("\n")
+}
+
+///|
 async fn upload_attachment_url_with_hook(
   state : AppState,
   normalized : @adapters.NormalizedMessage,
@@ -1892,7 +1965,13 @@ async fn rewrite_attachment_urls(
         ) {
           state.attachment_proxy_map.val.set(original_url, url)
         }
-        @shared.Attachment::{ ..attachment, url, }
+        @shared.Attachment::{
+          ..attachment,
+          url: "/attachments/proxy?url=" +
+            url_encode_component(url) +
+            "&name=" +
+            url_encode_component(attachment.name),
+        }
       }
       None => {
         if hook_enabled {
@@ -1914,10 +1993,11 @@ async fn rewrite_attachment_urls(
     rewritten.push(final_attachment)
     if final_attachment.url != "" {
       attachment_lines.push(
-        "[attachment] " + final_attachment.name + " " + final_attachment.url,
+        "[file] " + final_attachment.name + " " + final_attachment.url,
       )
     }
   }
+  let base_text = strip_plain_file_lines(normalized.text, rewritten)
   let lines = attachment_lines
   if failed > 0 && hook_enabled {
     lines.push("[attachment-upload-failed] count=" + failed.to_string())
@@ -1925,7 +2005,7 @@ async fn rewrite_attachment_urls(
   @adapters.NormalizedMessage::{
     ..normalized,
     attachments: rewritten,
-    text: append_lines(normalized.text, lines),
+    text: append_lines(base_text, lines),
   }
 }
 
@@ -2004,6 +2084,10 @@ async fn try_start_direct_bridge(
     proxy_url=cfg.proxy_url,
   )
   adapter.listen_incoming(fn(normalized) {
+    if mark_seen_direct_external_id(state, normalized.external_id) {
+      println("ignored duplicated direct event: id=\{normalized.external_id}")
+      return
+    }
     tasks.spawn_bg(() => {
       handle_direct_incoming_async(state, ingest_ctx, normalized)
     })
@@ -2037,9 +2121,44 @@ async fn main {
   if awslim_bin != "" {
     state.awslim_s3_bin.val = awslim_bin
   }
-  state.attachment_upload_cmd.val = env_value("AIRLOCK_ATTACHMENT_UPLOAD_CMD")
+  let s3_access_key_id = env_value("AWS_ACCESS_KEY_ID")
+  if s3_access_key_id != "" {
+    state.s3_access_key_id.val = s3_access_key_id
+  }
+  let s3_secret_access_key = env_value("AWS_SECRET_ACCESS_KEY")
+  if s3_secret_access_key != "" {
+    state.s3_secret_access_key.val = s3_secret_access_key
+  }
+  let s3_region = {
+    let region = env_value("AWS_REGION")
+    if region != "" {
+      region
+    } else {
+      env_value("AWS_DEFAULT_REGION")
+    }
+  }
+  if s3_region != "" {
+    state.s3_region.val = s3_region
+  }
+  let attachment_upload_cmd_env = env_value("AIRLOCK_ATTACHMENT_UPLOAD_CMD")
+  let attachment_upload_cmd_arg = match arg_value(args, "attachment-upload-cmd") {
+    Some(v) => v.trim().to_string()
+    None => ""
+  }
+  let enable_attachment_upload_s3 = has_flag(args, "attachment-upload-s3")
+  state.attachment_upload_cmd.val = if attachment_upload_cmd_arg != "" {
+    attachment_upload_cmd_arg
+  } else if attachment_upload_cmd_env != "" {
+    attachment_upload_cmd_env
+  } else if enable_attachment_upload_s3 {
+    "./src/cmd/it_support_app/scripts/upload_to_s3_compatible.sh"
+  } else {
+    ""
+  }
   if state.attachment_upload_cmd.val.trim().to_string() != "" {
-    println("attachment upload hook enabled via AIRLOCK_ATTACHMENT_UPLOAD_CMD")
+    println(
+      "attachment upload hook enabled: cmd=\{state.attachment_upload_cmd.val}",
+    )
   }
   let ingest_ctx = build_ingest_context(state)
   @async.with_task_group(async fn(tasks) {

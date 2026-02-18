@@ -121,8 +121,8 @@ fn url_encode_component(text : String) -> String {
 }
 
 ///|
-fn render_message_text_with_links(text : String) -> String {
-  let sb = StringBuilder::new(size_hint=text.length() + 64)
+fn render_text_with_auto_links(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length() + 48)
   let mut i = 0
   let mut plain_start = 0
   while i < text.length() {
@@ -159,6 +159,61 @@ fn render_message_text_with_links(text : String) -> String {
     sb.write_string(escape_html_text(substring(text, plain_start, text.length())))
   }
   sb.to_string()
+}
+
+///|
+fn file_line_url_start(line : String, start : Int) -> Int {
+  for i in start..<line.length() {
+    let is_http = starts_with_at(line, i, "http://")
+    let is_https = starts_with_at(line, i, "https://")
+    let is_proxy_rel = starts_with_at(line, i, "/attachments/proxy?url=")
+    if (is_http || is_https || is_proxy_rel) &&
+      (i == start || line[i - 1] == ' ') {
+      return i
+    }
+  }
+  -1
+}
+
+///|
+fn render_file_line_with_filename_link(line : String) -> String? {
+  let prefix = "[file] "
+  if !starts_with_at(line, 0, prefix) {
+    return None
+  }
+  let url_start = file_line_url_start(line, prefix.length())
+  if url_start <= prefix.length() {
+    return None
+  }
+  let file_name = substring(line, prefix.length(), url_start).trim().to_string()
+  let raw_url = substring(line, url_start, line.length()).trim().to_string()
+  if file_name == "" || raw_url == "" {
+    return None
+  }
+  let href = if starts_with_at(raw_url, 0, "/attachments/proxy?url=") {
+    raw_url
+  } else {
+    "/attachments/proxy?url=" + url_encode_component(raw_url)
+  }
+  Some(
+    escape_html_text(prefix) + "<a href=\"" + escape_html_text(href) +
+    "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
+    escape_html_text(file_name) + "</a>",
+  )
+}
+
+///|
+fn render_message_text_with_links(text : String) -> String {
+  let lines = text.split("\n")
+  let rendered : Array[String] = []
+  for line in lines {
+    let line_text = line.to_string()
+    match render_file_line_with_filename_link(line_text) {
+      Some(html) => rendered.push(html)
+      None => rendered.push(render_text_with_auto_links(line_text))
+    }
+  }
+  rendered.join("\n")
 }
 
 ///|

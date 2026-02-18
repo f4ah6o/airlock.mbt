@@ -80,14 +80,33 @@ if [[ -n "$download_headers" ]]; then
 fi
 token="${DIRECT4B_API_TOKEN:-${DIRECT_API_TOKEN:-}}"
 if [[ "$download_ok" -ne 1 && -n "$token" ]]; then
-  if curl -fsSL -H "Authorization: Bearer ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+  alb_url="$download_url"
+  if [[ "$alb_url" == https://api.direct4b.com/* || "$alb_url" == http://api.direct4b.com/* ]]; then
+    if [[ "$alb_url" != *"Authorization="* ]]; then
+      if [[ "$alb_url" == *"?"* ]]; then
+        alb_url="${alb_url}&Authorization=ALB%20${token}"
+      else
+        alb_url="${alb_url}?Authorization=ALB%20${token}"
+      fi
+    fi
+    if curl -fsSL "$alb_url" -o "$tmp_file"; then
+      download_ok=1
+      auth_method="Authorization=ALB query"
+      echo "downloaded attachment with Authorization=ALB query" >&2
+    else
+      last_curl_error="Authorization=ALB query failed"
+    fi
+  fi
+  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "Authorization: Bearer ${token}" "$download_url" -o "$tmp_file"; then
     download_ok=1
     auth_method="Authorization: Bearer"
     echo "downloaded attachment with Authorization: Bearer" >&2
   else
-    last_curl_error="Authorization: Bearer failed"
+    if [[ "$download_ok" -ne 1 ]]; then
+      last_curl_error="${last_curl_error}; Authorization: Bearer failed"
+    fi
   fi
-  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-Auth-Token: ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-Auth-Token: ${token}" "$download_url" -o "$tmp_file"; then
     download_ok=1
     auth_method="X-Auth-Token"
     echo "downloaded attachment with X-Auth-Token" >&2
@@ -96,7 +115,7 @@ if [[ "$download_ok" -ne 1 && -n "$token" ]]; then
       last_curl_error="${last_curl_error}; X-Auth-Token failed"
     fi
   fi
-  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-API-Token: ${token}" "${AIRLOCK_ATTACHMENT_URL}" -o "$tmp_file"; then
+  if [[ "$download_ok" -ne 1 ]] && curl -fsSL -H "X-API-Token: ${token}" "$download_url" -o "$tmp_file"; then
     download_ok=1
     auth_method="X-API-Token"
     echo "downloaded attachment with X-API-Token" >&2
