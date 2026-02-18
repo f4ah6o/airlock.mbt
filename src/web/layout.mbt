@@ -18,6 +18,8 @@ fn app_style() -> String {
     ".chat-item.system { background: #fef3c7; margin-inline: auto; border: 1px solid #fde68a; }",
     ".chat-item__meta { font-size: 11px; color: #64748b; margin-bottom: 4px; }",
     ".chat-item__text { font-size: 13px; color: #0f172a; white-space: pre-wrap; }",
+    ".chat-item__attachments { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }",
+    ".chat-attachment-image { display: block; width: auto; max-width: min(320px, 62vw); max-height: 220px; object-fit: cover; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }",
     ".note-edit-form { display: grid; gap: 6px; margin-top: 8px; }", ".note-actions { display: flex; gap: 6px; justify-content: flex-end; }",
     ".note-inline-input { min-height: 56px; }", ".form { margin-top: 10px; display: grid; gap: 8px; }",
     ".input { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.16); padding: 8px; font-size: 13px; }",
@@ -214,6 +216,56 @@ fn render_message_text_with_links(text : String) -> String {
     }
   }
   rendered.join("\n")
+}
+
+///|
+fn attachment_preview_url(url : String) -> String {
+  if starts_with_at(url, 0, "/attachments/proxy?") {
+    url + "&inline=1"
+  } else if starts_with_at(url, 0, "/attachments/proxy") {
+    url + "?inline=1"
+  } else {
+    url
+  }
+}
+
+///|
+fn image_attachment_nodes(message : @shared.Message) -> Array[@tmpx.Node] {
+  let nodes : Array[@tmpx.Node] = []
+  for attachment in message.attachments {
+    if attachment.attachment_type != @shared.Image || attachment.url == "" {
+      continue
+    }
+    let img_url = attachment_preview_url(attachment.url)
+    nodes.push(
+      @tmpx.a_parts(
+        parts(
+          [
+            @tmpx.href(img_url),
+            @tmpx.attr("target", "_blank"),
+            @tmpx.attr("rel", "noopener noreferrer"),
+          ],
+          [
+            @tmpx.unsafe_custom_element(
+              "img",
+              parts(
+                [
+                  @tmpx.attr("class", "chat-attachment-image"),
+                  @tmpx.attr("src", img_url),
+                  @tmpx.attr("alt", attachment.name),
+                  @tmpx.attr("loading", "lazy"),
+                  @tmpx.attr("decoding", "async"),
+                  @tmpx.attr("referrerpolicy", "no-referrer"),
+                ],
+                [],
+              ),
+            ),
+          ],
+        ),
+      ),
+    )
+  }
+  nodes
 }
 
 ///|
@@ -434,19 +486,28 @@ fn ticket_left_content(
 ///|
 fn message_item(message : @shared.Message) -> @tmpx.Node {
   let classes = ["chat-item", message_origin_class(message.origin)]
+  let preview_nodes = image_attachment_nodes(message)
+  let nodes : Array[@tmpx.Node] = [
+    @tmpx.div_parts(
+      parts([@tmpx.class_("chat-item__meta")], [
+        @tmpx.text(sender_label(message) + " - " + message.origin.to_string()),
+      ]),
+    ),
+    @tmpx.div_parts(
+      parts([@tmpx.class_("chat-item__text")], [
+        @tmpx.raw(render_message_text_with_links(message.text)),
+      ]),
+    ),
+  ]
+  if !preview_nodes.is_empty() {
+    nodes.push(
+      @tmpx.div_parts(
+        parts([@tmpx.class_("chat-item__attachments")], preview_nodes),
+      ),
+    )
+  }
   @tmpx.li_parts(
-    parts([@tmpx.class_list(classes)], [
-      @tmpx.div_parts(
-        parts([@tmpx.class_("chat-item__meta")], [
-          @tmpx.text(sender_label(message) + " - " + message.origin.to_string()),
-        ]),
-      ),
-      @tmpx.div_parts(
-        parts([@tmpx.class_("chat-item__text")], [
-          @tmpx.raw(render_message_text_with_links(message.text)),
-        ]),
-      ),
-    ]),
+    parts([@tmpx.class_list(classes)], nodes),
   )
 }
 
@@ -807,7 +868,25 @@ fn app_script() -> String {
     "  var form = target.closest('form');", "  if (!form) { return; }", "  if (typeof form.requestSubmit === 'function') {",
     "    form.requestSubmit();", "    return;", "  }", "  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));",
     "});", "(function () {", "  if (typeof EventSource === 'undefined') { return; }",
-    "  var eventSource = new EventSource('/events');", "  var refresh = function () {",
+    "  var hasNotificationPrompted = false;", "  var lastNotifiedVersion = -1;",
+    "  var ensurePermission = function () {", "    if (hasNotificationPrompted) { return; }",
+    "    if (typeof Notification === 'undefined') { return; }",
+    "    if (Notification.permission !== 'default') { return; }",
+    "    hasNotificationPrompted = true;",
+    "    Notification.requestPermission().catch(function () {});",
+    "  };", "  document.addEventListener('click', ensurePermission, { once: true });",
+    "  document.addEventListener('keydown', ensurePermission, { once: true });",
+    "  var notifyIfNeeded = function (payload) {",
+    "    if (typeof Notification === 'undefined') { return; }",
+    "    if (Notification.permission !== 'granted') { return; }",
+    "    if (!document.hidden && document.hasFocus && document.hasFocus()) { return; }",
+    "    if (!payload || typeof payload.version !== 'number') { return; }",
+    "    if (payload.version <= lastNotifiedVersion) { return; }",
+    "    lastNotifiedVersion = payload.version;",
+    "    var title = payload.subject ? String(payload.subject) : 'it-support-app';",
+    "    var body = payload.preview ? String(payload.preview) : ('チケット ' + (payload.ticket_id || '-') + ' に新着メッセージ');",
+    "    try { new Notification(title, { body: body, tag: 'ticket-' + (payload.ticket_id || 'unknown') }); } catch (_) {}",
+    "  };", "  var eventSource = new EventSource('/events');", "  var refresh = function () {",
     "    var ticketId = selectedTicketId();", "    var left = document.getElementById('pane-left');",
     "    if (left) {", "      left.setAttribute('mx-get', '/partials/tickets/' + ticketId);",
     "      left.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
@@ -817,7 +896,14 @@ fn app_script() -> String {
     "    var right = document.getElementById('pane-right');", "    if (right) {",
     "      right.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/right');",
     "      right.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
-    "  };", "  eventSource.addEventListener('ticket-updated', refresh);", "  eventSource.addEventListener('message', refresh);",
+    "  };",
+    "  eventSource.addEventListener('ticket-updated', function (event) {",
+    "    var payload = {};",
+    "    try { payload = JSON.parse(event.data || '{}'); } catch (_) { payload = {}; }",
+    "    notifyIfNeeded(payload);",
+    "    refresh();",
+    "  });",
+    "  eventSource.addEventListener('message', refresh);",
     "})();",
   ].join("\n")
 }

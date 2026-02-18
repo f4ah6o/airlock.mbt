@@ -594,6 +594,19 @@ fn notify_ticket_updated(state : AppState, ticket_id : String) -> Unit {
 }
 
 ///|
+fn single_line_preview(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length())
+  for c in text {
+    if c == '\n' || c == '\r' || c == '\t' {
+      sb.write_char(' ')
+    } else {
+      sb.write_char(c)
+    }
+  }
+  sb.to_string().trim().to_string()
+}
+
+///|
 async fn handle_sse_subscribe(state : AppState, conn : @socket.Tcp) -> Unit {
   let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
   conn.write(array_to_bytes(string_to_bytes(header)))
@@ -604,7 +617,25 @@ async fn handle_sse_subscribe(state : AppState, conn : @socket.Tcp) -> Unit {
     if current_version != seen_version {
       seen_version = current_version
       let ticket_id = state.realtime_last_ticket_id.val
-      let payload = "{\"ticket_id\":\"" + ticket_id + "\"}"
+      let ticket_subject = match state.ticket_repo.get(ticket_id) {
+        Ok(t) => t.subject
+        Err(_) => ""
+      }
+      let timeline = state.message_repo.list_public_by_ticket(ticket_id)
+      let preview_message = if timeline.is_empty() {
+        ""
+      } else {
+        single_line_preview(timeline[timeline.length() - 1].text)
+      }
+      let payload = "{\"ticket_id\":\"" +
+        json_escape(ticket_id) +
+        "\",\"version\":" +
+        current_version.to_string() +
+        ",\"subject\":\"" +
+        json_escape(ticket_subject) +
+        "\",\"preview\":\"" +
+        json_escape(preview_message) +
+        "\"}"
       send_sse_event(conn, "ticket-updated", payload)
     }
     @async.sleep(200)
@@ -636,6 +667,7 @@ fn binary_response(
 ) -> @http.Response {
   let resp = @http.Response::new(status, reason)
   .header("Content-Type", content_type)
+  .header("X-Content-Type-Options", "nosniff")
   .header("Content-Length", body.length().to_string())
   .header("Connection", "close")
   if content_disposition != "" {
@@ -1007,6 +1039,65 @@ fn content_disposition_for_download(name : String) -> String {
 }
 
 ///|
+fn content_disposition_for_inline(name : String) -> String {
+  let safe = sanitize_filename(name)
+  if safe == "" {
+    ""
+  } else {
+    "inline; filename=\"" + safe + "\""
+  }
+}
+
+///|
+fn ascii_lower(text : String) -> String {
+  let sb = StringBuilder::new(size_hint=text.length())
+  for i in 0..<text.length() {
+    let code = ascii_lower_u16(text[i])
+    sb.write_char(Int::unsafe_to_char(code))
+  }
+  sb.to_string()
+}
+
+///|
+fn has_suffix(text : String, suffix : String) -> Bool {
+  if suffix.length() > text.length() {
+    return false
+  }
+  let start = text.length() - suffix.length()
+  for i in 0..<suffix.length() {
+    if text[start + i] != suffix[i] {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn infer_image_mime_from_name(name : String) -> String? {
+  let safe = sanitize_filename(name)
+  let lower = ascii_lower(safe)
+  if has_suffix(lower, ".png") {
+    return Some("image/png")
+  }
+  if has_suffix(lower, ".jpg") || has_suffix(lower, ".jpeg") {
+    return Some("image/jpeg")
+  }
+  if has_suffix(lower, ".gif") {
+    return Some("image/gif")
+  }
+  if has_suffix(lower, ".webp") {
+    return Some("image/webp")
+  }
+  None
+}
+
+///|
+fn is_truthy_query(v : String) -> Bool {
+  let lower = ascii_lower(v.trim().to_string())
+  lower == "1" || lower == "true" || lower == "yes"
+}
+
+///|
 async fn fetch_direct_attachment_bytes(
   state : AppState,
   url : String,
@@ -1143,7 +1234,28 @@ async fn handle_attachment_proxy(
     Some(v) => sanitize_filename(v)
     None => ""
   }
-  let content_disposition = content_disposition_for_download(download_name)
+  let wants_inline = match query.get("inline") {
+    Some(v) => is_truthy_query(v)
+    None => false
+  }
+  let image_mime = infer_image_mime_from_name(download_name)
+  let can_inline = if !wants_inline {
+    false
+  } else {
+    match image_mime {
+      Some(_) => true
+      None => false
+    }
+  }
+  let content_type = match image_mime {
+    Some(m) => if can_inline { m } else { "application/octet-stream" }
+    None => "application/octet-stream"
+  }
+  let content_disposition = if can_inline {
+    content_disposition_for_inline(download_name)
+  } else {
+    content_disposition_for_download(download_name)
+  }
   if !is_allowed_proxy_url(state, target_url) {
     return forbidden_response("url is not allowed")
   }
@@ -1158,7 +1270,7 @@ async fn handle_attachment_proxy(
             200,
             "OK",
             body,
-            "application/octet-stream",
+            content_type,
             content_disposition=content_disposition,
           )
           Err(err_msg) =>
@@ -1180,7 +1292,7 @@ async fn handle_attachment_proxy(
       200,
       "OK",
       body,
-      "application/octet-stream",
+      content_type,
       content_disposition=content_disposition,
     )
     Err(msg) => bad_gateway_response(msg)
@@ -1991,7 +2103,8 @@ async fn rewrite_attachment_urls(
       }
     }
     rewritten.push(final_attachment)
-    if final_attachment.url != "" {
+    if final_attachment.url != "" &&
+      final_attachment.attachment_type != @shared.Image {
       attachment_lines.push(
         "[file] " + final_attachment.name + " " + final_attachment.url,
       )
