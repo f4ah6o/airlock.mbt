@@ -27,7 +27,7 @@ help:
       "  just app                # s3 prepare + env check + run app" \
       "  opz daab-dev -- just app  # recommended (bot env from opz)" \
       "  just app-up             # same as app" \
-      "  just app-prepare        # s3 prepare + direct token refresh/verify + env check" \
+      "  just app-prepare        # s3 prepare + env check" \
       "  just app-run            # run it_support_app (native, upload hook on)" \
       "" \
       "Direct auth/token:" \
@@ -233,7 +233,7 @@ s3-prepare: s3-up s3-bucket-ready
 
 # app flow
 
-app-prepare: s3-prepare direct-prepare-rest direct-env-check
+app-prepare: s3-prepare direct-env-check
 
 app-run:
     @export AWSLIM_S3_BIN="${AWSLIM_S3_BIN:-{{awslim_s3_bin}}}"; \
