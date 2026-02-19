@@ -14,11 +14,7 @@ fn array_to_bytes(arr : Array[Byte]) -> Bytes {
 
 ///|
 fn string_to_bytes(s : String) -> Array[Byte] {
-  let result : Array[Byte] = []
-  for i in 0..<s.length() {
-    result.push(s[i].to_int().to_byte())
-  }
-  result
+  bytes_to_array(@utf8.encode(s))
 }
 
 ///|
@@ -859,6 +855,10 @@ fn full_page_response(
       }
     None => if tickets.is_empty() { None } else { Some(tickets[0]) }
   }
+  match selected {
+    Some(t) => fill_sender_names_from_cache(state, t.ticket_id)
+    None => ()
+  }
   let timeline = match selected {
     None => []
     Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
@@ -940,9 +940,7 @@ fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
   for message in messages {
     match state.direct_user_name_cache.val.get(message.sender_id) {
       Some(name) =>
-        if name != "" &&
-          (message.sender_name == "" ||
-          message.sender_name == message.sender_id) {
+        if name != "" && message.sender_name != name {
           let updated = @shared.Message::{ ..message, sender_name: name }
           let _ = state.message_repo.update(updated)
         }
@@ -1398,6 +1396,7 @@ async fn handle_attachment_proxy(
 async fn handle_get(state : AppState, uri : String) -> @http.Response {
   let path = path_only(uri)
   if path == "/" {
+    try_load_direct_user_names_once(state)
     return full_page_response(state, None)
   }
   if path == "/attachments/proxy" {
