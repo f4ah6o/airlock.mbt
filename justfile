@@ -132,8 +132,9 @@ direct-env-check:
       rest_token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "{{direct_api_env_file}}" | tail -n 1)"; \
     fi; \
     if [[ -z "$rest_token" ]]; then \
-      echo "warning: DIRECT4B_DIRECT_API_TOKEN is empty (username lookup fallback may not work)."; \
-      echo "hint: run 'just direct-login-rest' (in opz if needed)"; \
+      echo "missing token: DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN / {{direct_api_env_file}})."; \
+      echo "hint: opz direct-api-dev -- just direct-login-rest"; \
+      missing=1; \
     fi; \
     if [[ "$missing" -ne 0 ]]; then \
       exit 2; \
@@ -146,8 +147,7 @@ direct-env-hint:
       "Required:" \
       "  opz daab-dev -- just app" \
       "  (or set DIRECT4B_API_TOKEN / DIRECT4B_BOT_USER_ID manually)" \
-      "Optional (recommended for username lookup):" \
-      "  just direct-login-rest"
+      "  opz direct-api-dev -- just direct-login-rest"
 
 # s3 (rustfs)
 

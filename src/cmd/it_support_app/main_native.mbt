@@ -179,55 +179,6 @@ fn url_decode(input : String) -> String {
 }
 
 ///|
-fn contains_cjk_or_kana(text : String) -> Bool {
-  for c in text {
-    let cp = c.to_int()
-    if (cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x4E00 && cp <= 0x9FFF) {
-      return true
-    }
-  }
-  false
-}
-
-///|
-fn looks_like_latin1_mojibake(text : String) -> Bool {
-  let mut latin1_like = 0
-  for c in text {
-    let cp = c.to_int()
-    if cp == 0xFFFD {
-      return true
-    }
-    if cp >= 0x80 && cp <= 0xFF {
-      latin1_like = latin1_like + 1
-    }
-  }
-  latin1_like >= 2
-}
-
-///|
-fn maybe_repair_mojibake_name(name : String) -> String {
-  if name == "" || !looks_like_latin1_mojibake(name) {
-    return name
-  }
-  let bytes : Array[Int] = []
-  for c in name {
-    let cp = c.to_int()
-    if cp < 0 || cp > 0xFF {
-      return name
-    }
-    bytes.push(cp)
-  }
-  let repaired = utf8_bytes_to_string(bytes)
-  if repaired == "" || repaired == name || looks_like_latin1_mojibake(repaired) {
-    return name
-  }
-  if contains_cjk_or_kana(repaired) {
-    return repaired
-  }
-  repaired
-}
-
-///|
 fn parse_form(body : String) -> Map[String, String] {
   let result : Map[String, String] = {}
   if body == "" {
@@ -937,61 +888,33 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     if user_id == "" || name == "" {
       return
     }
-    let fixed_name = maybe_repair_mojibake_name(name)
-    if fixed_name == "" {
-      return
+    if state.direct_user_name_cache.val.get(user_id) is None {
+      added_counter.val = added_counter.val + 1
     }
-    match state.direct_user_name_cache.val.get(user_id) {
-      Some(existing) =>
-        // Keep existing real names, but allow replacing placeholder values.
-        if existing != "" && !(existing == user_id && fixed_name != user_id) {
-          return
-        }
-      None => added_counter.val = added_counter.val + 1
-    }
-    state.direct_user_name_cache.val.set(user_id, fixed_name)
+    state.direct_user_name_cache.val.set(user_id, name)
   }
   let added_counter : Ref[Int] = { val: 0 }
-  let adapter = match state.direct_adapter.val {
-    Some(v) => v
-    None => {
-      println("direct user-name lookup skipped: adapter is not connected")
-      return
-    }
-  }
-  match adapter.fetch_known_user_names() {
-    Ok(entries) =>
-      for pair in entries {
-        let (user_id, name) = pair
-        upsert_name(state, user_id, name, added_counter)
-      }
-    Err(err) =>
-      println("failed to load direct user names: \{clip_for_error(err.to_string())}")
-  }
-  added = added_counter.val
-  if added == 0 {
-    let token = state.direct_api_token.val
-    if token != "" {
-      let talks_result = try? @direct_api_talks.get_talks(token)
-      match talks_result {
-        Ok(talks) => {
-          for talk in talks {
-            for user in talk.users {
-              upsert_name(state, user.user_id_str, user.name, added_counter)
-            }
+  let token = state.direct_api_token.val
+  if token != "" {
+    let talks_result = try? @direct_api_talks.get_talks(token)
+    match talks_result {
+      Ok(talks) => {
+        for talk in talks {
+          for user in talk.users {
+            upsert_name(state, user.user_id_str, user.name, added_counter)
           }
-          added = added_counter.val
         }
-        Err(err) =>
-          println(
-            "failed to load direct user names via direct-api: \{clip_for_error(err.to_string())}",
-          )
+        added = added_counter.val
       }
-    } else {
-      println(
-        "direct-api user-name lookup skipped: set DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN)",
-      )
+      Err(err) =>
+        println(
+          "failed to load direct user names via direct-api: \{clip_for_error(err.to_string())}",
+        )
     }
+  } else {
+    println(
+      "direct-api user-name lookup disabled: DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN) is required",
+    )
   }
   println(
     "loaded direct user names: added=\{added.to_string()} cache_size=\{state.direct_user_name_cache.val.length().to_string()}",
