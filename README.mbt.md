@@ -18,17 +18,26 @@ Requirements:
 - `curl`
 
 ```bash
-# 1) Start rustfs
-just s3-rustfs-up
+# 1) Generate direct-api REST token once
+just direct-login-rest
+eval "$(just direct-rest-token-export)"
 
-# 2) Create/check bucket (default: airlock-attachments)
-just s3-rustfs-mk-bucket
+# 2) Export bot token + bot user id
+export DIRECT4B_API_TOKEN='<bot-token>'
+export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'
 
-# 3) Run it-support-app with upload hook enabled
-just run-native-rustfs
+# 3) Full run (s3 prepare + env check + app run)
+just app-up
 ```
 
-Defaults used by `run-native-rustfs`:
+Split run:
+
+```bash
+just app-prepare
+just app-run
+```
+
+Defaults used by `app-run`:
 
 - `S3_ENDPOINT_URL=http://127.0.0.1:9000`
 - `S3_BUCKET=airlock-attachments`
@@ -48,6 +57,8 @@ Attachment behavior:
 Useful commands:
 
 ```bash
-just s3-rustfs-logs
-just s3-rustfs-down
+just help
+just app-debug-auth
+just s3-logs
+just s3-down
 ```
