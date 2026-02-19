@@ -27,12 +27,15 @@ help:
       "  just app                # s3 prepare + env check + run app" \
       "  opz daab-dev -- just app  # recommended (bot env from opz)" \
       "  just app-up             # same as app" \
-      "  just app-prepare        # s3 prepare + direct env check" \
+      "  just app-prepare        # s3 prepare + direct token refresh/verify + env check" \
       "  just app-run            # run it_support_app (native, upload hook on)" \
       "" \
       "Direct auth/token:" \
       "  just direct-login-bot" \
       "  just direct-login-rest" \
+      "  just direct-refresh-rest" \
+      "  just direct-verify-rest" \
+      "  just direct-prepare-rest" \
       "  just direct-rest-token-print" \
       "  just direct-env-check" \
       "" \
@@ -95,6 +98,35 @@ direct-login-rest:
       moon -C ../direct-api.mbt run src/main --target native -- login; \
     fi
 
+direct-refresh-rest:
+    @if command -v opz >/dev/null 2>&1; then \
+      if ! opz direct-api-dev -- moon -C ../direct-api.mbt run src/main --target native -- refresh-token; then \
+        echo "direct-api refresh failed. run: opz direct-api-dev -- just direct-login-rest"; \
+        exit 2; \
+      fi; \
+    else \
+      if ! moon -C ../direct-api.mbt run src/main --target native -- refresh-token; then \
+        echo "direct-api refresh failed. run: just direct-login-rest"; \
+        exit 2; \
+      fi; \
+    fi
+
+direct-verify-rest:
+    @if command -v opz >/dev/null 2>&1; then \
+      if ! opz direct-api-dev -- moon -C ../direct-api.mbt run src/main --target native -- me >/dev/null; then \
+        echo "direct-api token verification failed. run: opz direct-api-dev -- just direct-login-rest"; \
+        exit 2; \
+      fi; \
+    else \
+      if ! moon -C ../direct-api.mbt run src/main --target native -- me >/dev/null; then \
+        echo "direct-api token verification failed. run: just direct-login-rest"; \
+        exit 2; \
+      fi; \
+    fi; \
+    echo "direct-api token verification: ok"
+
+direct-prepare-rest: direct-refresh-rest direct-verify-rest
+
 # Print token for AIRLOCK user-name lookup (DIRECT4B_DIRECT_API_TOKEN)
 direct-rest-token-print:
     @env_file="{{direct_api_env_file}}"; \
@@ -133,7 +165,7 @@ direct-env-check:
     fi; \
     if [[ -z "$rest_token" ]]; then \
       echo "missing token: DIRECT4B_DIRECT_API_TOKEN (or {{direct_api_env_file}})."; \
-      echo "hint: opz direct-api-dev -- just direct-login-rest"; \
+      echo "hint: opz direct-api-dev -- just direct-prepare-rest"; \
       missing=1; \
     fi; \
     if [[ "$missing" -ne 0 ]]; then \
@@ -147,7 +179,7 @@ direct-env-hint:
       "Required:" \
       "  opz daab-dev -- just app" \
       "  (or set DIRECT4B_API_TOKEN / DIRECT4B_BOT_USER_ID manually)" \
-      "  opz direct-api-dev -- just direct-login-rest"
+      "  opz direct-api-dev -- just direct-prepare-rest"
 
 # s3 (rustfs)
 
@@ -201,7 +233,7 @@ s3-prepare: s3-up s3-bucket-ready
 
 # app flow
 
-app-prepare: s3-prepare direct-env-check
+app-prepare: s3-prepare direct-prepare-rest direct-env-check
 
 app-run:
     @export AWSLIM_S3_BIN="${AWSLIM_S3_BIN:-{{awslim_s3_bin}}}"; \

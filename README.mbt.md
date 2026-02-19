@@ -18,8 +18,10 @@ Requirements:
 - `curl`
 
 ```bash
-# 1) Generate direct-api REST token once
-opz direct-api-dev -- just direct-login-rest
+# 1) Prepare direct-api token (refresh + verify)
+opz direct-api-dev -- just direct-prepare-rest
+# If this is your first run or refresh fails:
+# opz direct-api-dev -- just direct-login-rest
 
 # 2) Full run (s3 prepare + strict env check + app run)
 opz daab-dev -- just app

@@ -917,7 +917,7 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
       }
       Err(err) =>
         println(
-          "failed to load direct user names via direct-api: token_len=\{token.length().to_string()} err=\{clip_for_error(err.to_string())}",
+          "failed to load direct user names via direct-api: token_len=\{token.length().to_string()} err=\{clip_for_error(err.to_string())} hint=opz direct-api-dev -- just direct-prepare-rest",
         )
     }
   } else {
