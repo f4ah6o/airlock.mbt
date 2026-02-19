@@ -876,6 +876,22 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
   if state.direct_user_names_loaded.val {
     return
   }
+  let mut added = 0
+  fn upsert_name(
+    state : AppState,
+    user_id : String,
+    name : String,
+    added_counter : Ref[Int],
+  ) -> Unit {
+    if user_id == "" || name == "" {
+      return
+    }
+    if state.direct_user_name_cache.val.get(user_id) is None {
+      added_counter.val = added_counter.val + 1
+    }
+    state.direct_user_name_cache.val.set(user_id, name)
+  }
+  let added_counter : Ref[Int] = { val: 0 }
   let adapter = match state.direct_adapter.val {
     Some(v) => v
     None => {
@@ -884,25 +900,38 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     }
   }
   match adapter.fetch_known_user_names() {
-    Ok(entries) => {
-      let mut added = 0
+    Ok(entries) =>
       for pair in entries {
         let (user_id, name) = pair
-        if user_id == "" || name == "" {
-          continue
-        }
-        if state.direct_user_name_cache.val.get(user_id) is None {
-          added = added + 1
-        }
-        state.direct_user_name_cache.val.set(user_id, name)
+        upsert_name(state, user_id, name, added_counter)
       }
-      println(
-        "loaded direct user names: added=\{added.to_string()} cache_size=\{state.direct_user_name_cache.val.length().to_string()}",
-      )
-    }
     Err(err) =>
       println("failed to load direct user names: \{clip_for_error(err.to_string())}")
   }
+  added = added_counter.val
+  if added == 0 {
+    let token = state.direct_api_token.val
+    if token != "" {
+      let talks_result = try? @direct_api_talks.get_talks(token)
+      match talks_result {
+        Ok(talks) => {
+          for talk in talks {
+            for user in talk.users {
+              upsert_name(state, user.user_id_str, user.name, added_counter)
+            }
+          }
+          added = added_counter.val
+        }
+        Err(err) =>
+          println(
+            "failed to load direct user names via direct-api: \{clip_for_error(err.to_string())}",
+          )
+      }
+    }
+  }
+  println(
+    "loaded direct user names: added=\{added.to_string()} cache_size=\{state.direct_user_name_cache.val.length().to_string()}",
+  )
   state.direct_user_names_loaded.val = true
 }
 

@@ -3,6 +3,7 @@ import {
   "airlock/airlock/core" @core,
   "airlock/airlock/shared" @shared,
   "airlock/airlock/web" @web,
+  "f4ah6o/direct_api/api/talks" @direct_api_talks,
   "f4ah6o/http11" @http,
   "moonbitlang/core/env" @env,
   "moonbitlang/core/encoding/utf8",
