@@ -856,7 +856,9 @@ fn full_page_response(
     None => if tickets.is_empty() { None } else { Some(tickets[0]) }
   }
   match selected {
-    Some(t) => fill_sender_names_from_cache(state, t.ticket_id)
+    Some(t) => {
+      let _ = fill_sender_names_from_cache(state, t.ticket_id)
+    }
     None => ()
   }
   let timeline = match selected {
@@ -932,30 +934,34 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
 }
 
 ///|
-fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
+fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Int {
   if state.direct_user_name_cache.val.is_empty() {
-    return
+    return 0
   }
+  let mut updated_count = 0
   let messages = state.message_repo.list_by_ticket(ticket_id)
   for message in messages {
     match state.direct_user_name_cache.val.get(message.sender_id) {
       Some(name) =>
         if name != "" && message.sender_name != name {
           let updated = @shared.Message::{ ..message, sender_name: name }
-          let _ = state.message_repo.update(updated)
+          match state.message_repo.update(updated) {
+            Ok(_) => updated_count = updated_count + 1
+            Err(_) => ()
+          }
         }
       None => ()
     }
   }
+  updated_count
 }
 
 ///|
-async fn ensure_ticket_open_context(
+fn ensure_ticket_open_context(
   state : AppState,
   ticket_id : String,
 ) -> Unit {
-  try_load_direct_user_names_once(state)
-  fill_sender_names_from_cache(state, ticket_id)
+  let _ = fill_sender_names_from_cache(state, ticket_id)
 }
 
 ///|
@@ -1396,7 +1402,6 @@ async fn handle_attachment_proxy(
 async fn handle_get(state : AppState, uri : String) -> @http.Response {
   let path = path_only(uri)
   if path == "/" {
-    try_load_direct_user_names_once(state)
     return full_page_response(state, None)
   }
   if path == "/attachments/proxy" {
@@ -2234,7 +2239,6 @@ async fn handle_direct_incoming_async(
   ingest_ctx : @core.IngestContext,
   normalized : @adapters.NormalizedMessage,
 ) -> Unit {
-  try_load_direct_user_names_once(state)
   let normalized = rewrite_attachment_urls(state, normalized)
   let normalized = if state.dev_mode.val && normalized.raw_data != "" {
     @adapters.NormalizedMessage::{ ..normalized, text: normalized.raw_data }
@@ -2254,12 +2258,20 @@ async fn handle_direct_incoming_async(
       println(
         "ingested direct message: ticket=\{ticket_id}, message=\{message_id}",
       )
+      try_load_direct_user_names_once(state)
+      if fill_sender_names_from_cache(state, ticket_id) > 0 {
+        notify_ticket_updated(state, ticket_id)
+      }
     }
     Ok(@core.DuplicateIgnored(ticket_id, message_id)) => {
       notify_ticket_updated(state, ticket_id)
       println(
         "ignored duplicated direct message: ticket=\{ticket_id}, message=\{message_id}",
       )
+      try_load_direct_user_names_once(state)
+      if fill_sender_names_from_cache(state, ticket_id) > 0 {
+        notify_ticket_updated(state, ticket_id)
+      }
     }
     Err(err) => println("failed to ingest direct message: \{err.to_string()}")
   }
