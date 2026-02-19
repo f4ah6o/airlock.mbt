@@ -179,6 +179,55 @@ fn url_decode(input : String) -> String {
 }
 
 ///|
+fn contains_cjk_or_kana(text : String) -> Bool {
+  for c in text {
+    let cp = c.to_int()
+    if (cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x4E00 && cp <= 0x9FFF) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn looks_like_latin1_mojibake(text : String) -> Bool {
+  let mut latin1_like = 0
+  for c in text {
+    let cp = c.to_int()
+    if cp == 0xFFFD {
+      return true
+    }
+    if cp >= 0x80 && cp <= 0xFF {
+      latin1_like = latin1_like + 1
+    }
+  }
+  latin1_like >= 2
+}
+
+///|
+fn maybe_repair_mojibake_name(name : String) -> String {
+  if name == "" || !looks_like_latin1_mojibake(name) {
+    return name
+  }
+  let bytes : Array[Int] = []
+  for c in name {
+    let cp = c.to_int()
+    if cp < 0 || cp > 0xFF {
+      return name
+    }
+    bytes.push(cp)
+  }
+  let repaired = utf8_bytes_to_string(bytes)
+  if repaired == "" || repaired == name || looks_like_latin1_mojibake(repaired) {
+    return name
+  }
+  if contains_cjk_or_kana(repaired) {
+    return repaired
+  }
+  repaired
+}
+
+///|
 fn parse_form(body : String) -> Map[String, String] {
   let result : Map[String, String] = {}
   if body == "" {
@@ -888,15 +937,19 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     if user_id == "" || name == "" {
       return
     }
+    let fixed_name = maybe_repair_mojibake_name(name)
+    if fixed_name == "" {
+      return
+    }
     match state.direct_user_name_cache.val.get(user_id) {
       Some(existing) =>
         // Keep existing real names, but allow replacing placeholder values.
-        if existing != "" && !(existing == user_id && name != user_id) {
+        if existing != "" && !(existing == user_id && fixed_name != user_id) {
           return
         }
       None => added_counter.val = added_counter.val + 1
     }
-    state.direct_user_name_cache.val.set(user_id, name)
+    state.direct_user_name_cache.val.set(user_id, fixed_name)
   }
   let added_counter : Ref[Int] = { val: 0 }
   let adapter = match state.direct_adapter.val {
