@@ -890,8 +890,8 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     }
     match state.direct_user_name_cache.val.get(user_id) {
       Some(existing) =>
-        // Keep the first non-empty name (usually from realtime websocket event).
-        if existing != "" {
+        // Keep existing real names, but allow replacing placeholder values.
+        if existing != "" && !(existing == user_id && name != user_id) {
           return
         }
       None => added_counter.val = added_counter.val + 1
@@ -955,7 +955,9 @@ fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
   for message in messages {
     match state.direct_user_name_cache.val.get(message.sender_id) {
       Some(name) =>
-        if name != "" && message.sender_name == "" {
+        if name != "" &&
+          (message.sender_name == "" ||
+          message.sender_name == message.sender_id) {
           let updated = @shared.Message::{ ..message, sender_name: name }
           let _ = state.message_repo.update(updated)
         }
