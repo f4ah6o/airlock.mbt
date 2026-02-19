@@ -19,22 +19,17 @@ Requirements:
 
 ```bash
 # 1) Generate direct-api REST token once
-just direct-login-rest
-eval "$(just direct-rest-token-export)"
+opz direct-api-dev -- just direct-login-rest
 
-# 2) Export bot token + bot user id
-export DIRECT4B_API_TOKEN='<bot-token>'
-export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'
-
-# 3) Full run (s3 prepare + env check + app run)
-just app-up
+# 2) Full run (s3 prepare + env check + app run)
+opz daab-dev -- just app
 ```
 
 Split run:
 
 ```bash
 just app-prepare
-just app-run
+opz daab-dev -- just app-run
 ```
 
 Defaults used by `app-run`:
@@ -58,7 +53,7 @@ Useful commands:
 
 ```bash
 just help
-just app-debug-auth
+opz daab-dev -- just app-debug-auth
 just s3-logs
 just s3-down
 ```

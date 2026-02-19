@@ -62,10 +62,6 @@ fn escape_html_text(text : String) -> String {
       sb.write_string("&quot;")
     } else if c == '\'' {
       sb.write_string("&#39;")
-    } else if c.to_int() > 127 {
-      sb.write_string("&#")
-      sb.write_string(c.to_int().to_string())
-      sb.write_string(";")
     } else {
       sb.write_char(c)
     }

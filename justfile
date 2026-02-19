@@ -24,14 +24,16 @@ help:
       "Airlock just tasks" \
       "" \
       "Main flow:" \
-      "  just app-up             # s3 prepare + env check + run app" \
+      "  just app                # s3 prepare + env check + run app" \
+      "  opz daab-dev -- just app  # recommended (bot env from opz)" \
+      "  just app-up             # same as app" \
       "  just app-prepare        # s3 prepare + direct env check" \
       "  just app-run            # run it_support_app (native, upload hook on)" \
       "" \
       "Direct auth/token:" \
       "  just direct-login-bot" \
       "  just direct-login-rest" \
-      "  just direct-rest-token-export" \
+      "  just direct-rest-token-print" \
       "  just direct-env-check" \
       "" \
       "S3 (rustfs):" \
@@ -88,7 +90,7 @@ direct-login-bot-token token:
 # Generate REST token (includes talks.read) and save to ../direct-api.mbt/.env
 direct-login-rest:
     @if command -v opz >/dev/null 2>&1; then \
-      opz daab-dev -- moon -C ../direct-api.mbt run src/main --target native -- login; \
+      opz direct-api-dev -- moon -C ../direct-api.mbt run src/main --target native -- login; \
     else \
       moon -C ../direct-api.mbt run src/main --target native -- login; \
     fi
@@ -125,9 +127,13 @@ direct-env-check:
       echo "hint: export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'"; \
       missing=1; \
     fi; \
-    if [[ -z "${DIRECT4B_DIRECT_API_TOKEN:-}" && -z "${DIRECT_API_ACCESS_TOKEN:-}" ]]; then \
+    rest_token="${DIRECT4B_DIRECT_API_TOKEN:-${DIRECT_API_ACCESS_TOKEN:-}}"; \
+    if [[ -z "$rest_token" && -f "{{direct_api_env_file}}" ]]; then \
+      rest_token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "{{direct_api_env_file}}" | tail -n 1)"; \
+    fi; \
+    if [[ -z "$rest_token" ]]; then \
       echo "warning: DIRECT4B_DIRECT_API_TOKEN is empty (username lookup fallback may not work)."; \
-      echo "hint: eval \"$(just direct-rest-token-export)\""; \
+      echo "hint: run 'just direct-login-rest' (in opz if needed)"; \
     fi; \
     if [[ "$missing" -ne 0 ]]; then \
       exit 2; \
@@ -138,10 +144,10 @@ direct-env-check:
 direct-env-hint:
     @printf "%s\n" \
       "Required:" \
-      "  export DIRECT4B_API_TOKEN='<bot-token>'" \
-      "  export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'" \
+      "  opz daab-dev -- just app" \
+      "  (or set DIRECT4B_API_TOKEN / DIRECT4B_BOT_USER_ID manually)" \
       "Optional (recommended for username lookup):" \
-      "  eval \"$(just direct-rest-token-export)\""
+      "  just direct-login-rest"
 
 # s3 (rustfs)
 
@@ -211,8 +217,16 @@ app-run:
     export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$S3_ENDPOINT_URL}"; \
     export S3_BUCKET="${S3_BUCKET:-{{rustfs_bucket}}}"; \
     export S3_PREFIX="${S3_PREFIX:-direct4b}"; \
+    if [[ -z "${DIRECT4B_DIRECT_API_TOKEN:-}" && -z "${DIRECT_API_ACCESS_TOKEN:-}" && -f "{{direct_api_env_file}}" ]]; then \
+      rest_token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "{{direct_api_env_file}}" | tail -n 1)"; \
+      if [[ -n "$rest_token" ]]; then \
+        export DIRECT4B_DIRECT_API_TOKEN="$rest_token"; \
+      fi; \
+    fi; \
     export AIRLOCK_ATTACHMENT_UPLOAD_CMD="{{airlock_upload_cmd}}"; \
     moon run src/cmd/it_support_app --target native -- --attachment-upload-s3
+
+app: app-up
 
 app-up: app-prepare app-run
 
