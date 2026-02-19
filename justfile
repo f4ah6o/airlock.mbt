@@ -48,6 +48,36 @@ login-token token:
         moon -C ../direct_sdk.mbt run src/daab --target native -- login --token "{{token}}" --force; \
       fi'
 
+# Generate REST token (includes talks.read) and save to ../direct-api.mbt/.env
+token-rest-login:
+    @bash -ceu 'set -euo pipefail; \
+      if command -v opz >/dev/null 2>&1; then \
+        opz daab-dev -- moon -C ../direct-api.mbt run src/main --target native -- login; \
+      else \
+        moon -C ../direct-api.mbt run src/main --target native -- login; \
+      fi'
+
+# Print token for AIRLOCK user-name lookup (DIRECT4B_DIRECT_API_TOKEN)
+token-rest-print:
+    @bash -ceu 'set -euo pipefail; \
+      env_file="../direct-api.mbt/.env"; \
+      if [[ ! -f "$env_file" ]]; then \
+        echo "missing $env_file. run: just token-rest-login"; \
+        exit 2; \
+      fi; \
+      token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "$env_file" | tail -n 1)"; \
+      if [[ -z "$token" ]]; then \
+        echo "DIRECT_API_ACCESS_TOKEN is empty. run: just token-rest-login"; \
+        exit 2; \
+      fi; \
+      printf "%s\n" "$token"'
+
+# Print `export` line for shell use
+token-rest-export:
+    @bash -ceu 'set -euo pipefail; \
+      token="$(just --justfile {{justfile()}} --quiet token-rest-print)"; \
+      printf "export DIRECT4B_DIRECT_API_TOKEN=%q\n" "$token"'
+
 s3-rustfs-up:
     @bash -ceu 'set -euo pipefail; \
       mkdir -p "{{rustfs_data_dir}}"; \

@@ -331,6 +331,7 @@ struct AppState {
   direct_seen_external_order : Ref[Array[String]]
   direct_user_name_cache : Ref[Map[String, String]]
   direct_user_names_loaded : Ref[Bool]
+  direct_bridge_token : Ref[String]
   direct_api_token : Ref[String]
   direct_attachment_host : Ref[String]
   s3_endpoint_url : Ref[String]
@@ -398,6 +399,7 @@ fn seed_state() -> AppState {
     direct_seen_external_order: { val: [] },
     direct_user_name_cache: { val: {} },
     direct_user_names_loaded: { val: false },
+    direct_bridge_token: { val: "" },
     direct_api_token: { val: "" },
     direct_attachment_host: { val: "api.direct4b.com" },
     s3_endpoint_url: { val: "http://127.0.0.1:9000" },
@@ -927,6 +929,10 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
             "failed to load direct user names via direct-api: \{clip_for_error(err.to_string())}",
           )
       }
+    } else {
+      println(
+        "direct-api user-name lookup skipped: set DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN)",
+      )
     }
   }
   println(
@@ -1160,7 +1166,7 @@ async fn fetch_direct_attachment_bytes(
   state : AppState,
   url : String,
 ) -> Result[Array[Byte], String] {
-  let token = state.direct_api_token.val
+  let token = state.direct_bridge_token.val
   if token != "" {
     let url_with_auth = if (
         (has_prefix(url, "https://api.direct4b.com/") ||
@@ -2007,6 +2013,26 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
 }
 
 ///|
+async fn read_direct_api_token(args : Array[String]) -> String {
+  let token_from_env_primary = env_value("DIRECT4B_DIRECT_API_TOKEN")
+  let token_from_env_rest = env_value("DIRECT4B_REST_API_TOKEN")
+  let token_from_env_direct_api = env_value("DIRECT_API_ACCESS_TOKEN")
+  if token_from_env_primary != "" {
+    return token_from_env_primary
+  }
+  if token_from_env_rest != "" {
+    return token_from_env_rest
+  }
+  if token_from_env_direct_api != "" {
+    return token_from_env_direct_api
+  }
+  match arg_value(args, "direct-api-token") {
+    Some(v) => v
+    None => ""
+  }
+}
+
+///|
 fn build_ingest_context(state : AppState) -> @core.IngestContext {
   @core.IngestContext::new(
     state.ticket_repo,
@@ -2087,9 +2113,9 @@ async fn upload_attachment_url_with_hook(
   envs.set("AIRLOCK_MESSAGE_EXTERNAL_ID", normalized.external_id)
   envs.set("AIRLOCK_CHANNEL_ID", normalized.channel_id)
   envs.set("AIRLOCK_PLATFORM", normalized.platform)
-  if state.direct_api_token.val != "" {
-    envs.set("DIRECT4B_API_TOKEN", state.direct_api_token.val)
-    envs.set("DIRECT_API_TOKEN", state.direct_api_token.val)
+  if state.direct_bridge_token.val != "" {
+    envs.set("DIRECT4B_API_TOKEN", state.direct_bridge_token.val)
+    envs.set("DIRECT_API_TOKEN", state.direct_bridge_token.val)
   }
   let (exit_code, stdout) = @process.collect_stdout(
     "sh",
@@ -2233,7 +2259,7 @@ async fn try_start_direct_bridge(
   println(
     "direct bridge config: endpoint=\{cfg.endpoint} proxy=\{cfg.proxy_url} token_len=\{cfg.token.length().to_string()} bot_user_id=\{cfg.bot_user_id}",
   )
-  state.direct_api_token.val = cfg.token
+  state.direct_bridge_token.val = cfg.token
   let endpoint_host = url_host(cfg.endpoint)
   if endpoint_host != "" {
     state.direct_attachment_host.val = endpoint_host
@@ -2283,7 +2309,7 @@ async fn main {
   if state.dev_mode.val {
     println("dev mode enabled: timeline renders raw_data when available")
   }
-  state.direct_api_token.val = env_value("DIRECT4B_API_TOKEN")
+  state.direct_api_token.val = read_direct_api_token(args)
   let s3_endpoint = env_value("S3_ENDPOINT_URL")
   if s3_endpoint != "" {
     state.s3_endpoint_url.val = s3_endpoint

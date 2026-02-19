@@ -36,7 +36,8 @@ Defaults used by `run-native-rustfs`:
 - `AWS_ACCESS_KEY_ID=rustfsadmin`
 - `AWS_SECRET_ACCESS_KEY=rustfsadmin`
 - `AWSLIM_S3_BIN=../awslim/awslim-s3`
-- `DIRECT4B_API_TOKEN=<direct bot token>`
+- `DIRECT4B_API_TOKEN=<direct bot token>` (WebSocket bridge 用)
+- `DIRECT4B_DIRECT_API_TOKEN=<direct-api token>` (ユーザー名解決用, talks.read)
 - `AIRLOCK_ATTACHMENT_UPLOAD_CMD=./src/cmd/it_support_app/scripts/upload_to_s3_compatible.sh`
 
 Attachment behavior:
