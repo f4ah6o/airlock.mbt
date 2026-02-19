@@ -127,12 +127,12 @@ direct-env-check:
       echo "hint: export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'"; \
       missing=1; \
     fi; \
-    rest_token="${DIRECT4B_DIRECT_API_TOKEN:-${DIRECT_API_ACCESS_TOKEN:-}}"; \
+    rest_token="${DIRECT4B_DIRECT_API_TOKEN:-}"; \
     if [[ -z "$rest_token" && -f "{{direct_api_env_file}}" ]]; then \
       rest_token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "{{direct_api_env_file}}" | tail -n 1)"; \
     fi; \
     if [[ -z "$rest_token" ]]; then \
-      echo "missing token: DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN / {{direct_api_env_file}})."; \
+      echo "missing token: DIRECT4B_DIRECT_API_TOKEN (or {{direct_api_env_file}})."; \
       echo "hint: opz direct-api-dev -- just direct-login-rest"; \
       missing=1; \
     fi; \
@@ -217,12 +217,13 @@ app-run:
     export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$S3_ENDPOINT_URL}"; \
     export S3_BUCKET="${S3_BUCKET:-{{rustfs_bucket}}}"; \
     export S3_PREFIX="${S3_PREFIX:-direct4b}"; \
-    if [[ -z "${DIRECT4B_DIRECT_API_TOKEN:-}" && -z "${DIRECT_API_ACCESS_TOKEN:-}" && -f "{{direct_api_env_file}}" ]]; then \
+    if [[ -f "{{direct_api_env_file}}" ]]; then \
       rest_token="$(sed -n "s/^DIRECT_API_ACCESS_TOKEN=//p" "{{direct_api_env_file}}" | tail -n 1)"; \
       if [[ -n "$rest_token" ]]; then \
         export DIRECT4B_DIRECT_API_TOKEN="$rest_token"; \
       fi; \
     fi; \
+    unset DIRECT_API_ACCESS_TOKEN; \
     export AIRLOCK_ATTACHMENT_UPLOAD_CMD="{{airlock_upload_cmd}}"; \
     moon run src/cmd/it_support_app --target native -- --attachment-upload-s3
 
@@ -233,12 +234,10 @@ app-up: app-prepare app-run
 app-debug-auth:
     @bot_token="${DIRECT4B_API_TOKEN:-}"; \
     rest_token="${DIRECT4B_DIRECT_API_TOKEN:-}"; \
-    fallback_rest_token="${DIRECT_API_ACCESS_TOKEN:-}"; \
     printf "%s\n" \
       "DIRECT4B_API_TOKEN length: ${#bot_token}" \
       "DIRECT4B_BOT_USER_ID: ${DIRECT4B_BOT_USER_ID:-<empty>}" \
       "DIRECT4B_DIRECT_API_TOKEN length: ${#rest_token}" \
-      "DIRECT_API_ACCESS_TOKEN length: ${#fallback_rest_token}" \
       "S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-{{rustfs_endpoint}}}" \
       "S3_BUCKET: ${S3_BUCKET:-{{rustfs_bucket}}}"
 

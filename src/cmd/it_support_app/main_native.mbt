@@ -913,7 +913,7 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     }
   } else {
     println(
-      "direct-api user-name lookup disabled: DIRECT4B_DIRECT_API_TOKEN (or DIRECT_API_ACCESS_TOKEN) is required",
+      "direct-api user-name lookup disabled: DIRECT4B_DIRECT_API_TOKEN is required",
     )
   }
   println(
@@ -1998,16 +1998,8 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
 ///|
 async fn read_direct_api_token(args : Array[String]) -> String {
   let token_from_env_primary = env_value("DIRECT4B_DIRECT_API_TOKEN")
-  let token_from_env_rest = env_value("DIRECT4B_REST_API_TOKEN")
-  let token_from_env_direct_api = env_value("DIRECT_API_ACCESS_TOKEN")
   if token_from_env_primary != "" {
     return token_from_env_primary
-  }
-  if token_from_env_rest != "" {
-    return token_from_env_rest
-  }
-  if token_from_env_direct_api != "" {
-    return token_from_env_direct_api
   }
   match arg_value(args, "direct-api-token") {
     Some(v) => v
