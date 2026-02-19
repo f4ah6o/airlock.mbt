@@ -899,8 +899,17 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     let talks_result = try? @direct_api_talks.get_talks(token)
     match talks_result {
       Ok(talks) => {
+        println(
+          "direct-api talks fetched: count=\{talks.length().to_string()}",
+        )
         for talk in talks {
+          println(
+            "direct-api talk: id=\{talk.talk_id_str} users=\{talk.users.length().to_string()}",
+          )
           for user in talk.users {
+            println(
+              "direct-api user: user_id=\{user.user_id_str} name=\{clip_for_error(user.name, limit=120)}",
+            )
             upsert_name(state, user.user_id_str, user.name, added_counter)
           }
         }
