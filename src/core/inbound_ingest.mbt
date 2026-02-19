@@ -19,7 +19,6 @@ pub(all) struct IngestContext {
   message_repo : MessageRepository
   generate_id : () -> String
   current_timestamp : () -> String
-  log_store : @logs.LogStore?
 }
 
 ///|
@@ -29,9 +28,8 @@ pub fn IngestContext::new(
   message_repo : MessageRepository,
   generate_id : () -> String,
   current_timestamp : () -> String,
-  log_store? : @logs.LogStore,
 ) -> IngestContext {
-  { ticket_repo, message_repo, generate_id, current_timestamp, log_store }
+  { ticket_repo, message_repo, generate_id, current_timestamp }
 }
 
 ///|
@@ -87,28 +85,13 @@ fn find_ticket_by_channel(
 
 ///|
 fn record_inbound_log(
-  ctx : IngestContext,
-  ticket_id : String,
-  message_id : String,
-  message : @shared.InboundMessage,
-  created_at : String,
+  _ctx : IngestContext,
+  _ticket_id : String,
+  _message_id : String,
+  _message : @shared.InboundMessage,
+  _created_at : String,
 ) -> Unit {
-  match ctx.log_store {
-    None => ()
-    Some(store) => {
-      let entry : @shared.LogEntry = {
-        log_id: (ctx.generate_id)(),
-        ticket_id,
-        event_type: "message_ingested",
-        entity_type: "message",
-        entity_id: message_id,
-        actor_id: message.sender_id,
-        payload_json: "{\"platform\":\"\{message.platform}\",\"external_id\":\"\{message.external_id}\",\"channel_id\":\"\{message.channel_id}\"}",
-        created_at,
-      }
-      store.append_entry(entry)
-    }
-  }
+  ()
 }
 
 ///|

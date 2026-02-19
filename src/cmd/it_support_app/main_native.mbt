@@ -872,8 +872,37 @@ fn full_page_response(
 }
 
 ///|
-fn try_load_direct_user_names_once(state : AppState) -> Unit {
-  // Scope out user-name lookup for now.
+async fn try_load_direct_user_names_once(state : AppState) -> Unit {
+  if state.direct_user_names_loaded.val {
+    return
+  }
+  let adapter = match state.direct_adapter.val {
+    Some(v) => v
+    None => {
+      println("direct user-name lookup skipped: adapter is not connected")
+      return
+    }
+  }
+  match adapter.fetch_known_user_names() {
+    Ok(entries) => {
+      let mut added = 0
+      for pair in entries {
+        let (user_id, name) = pair
+        if user_id == "" || name == "" {
+          continue
+        }
+        if state.direct_user_name_cache.val.get(user_id) is None {
+          added = added + 1
+        }
+        state.direct_user_name_cache.val.set(user_id, name)
+      }
+      println(
+        "loaded direct user names: added=\{added.to_string()} cache_size=\{state.direct_user_name_cache.val.length().to_string()}",
+      )
+    }
+    Err(err) =>
+      println("failed to load direct user names: \{clip_for_error(err.to_string())}")
+  }
   state.direct_user_names_loaded.val = true
 }
 
@@ -896,7 +925,7 @@ fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Unit {
 }
 
 ///|
-fn ensure_ticket_open_context(
+async fn ensure_ticket_open_context(
   state : AppState,
   ticket_id : String,
 ) -> Unit {
