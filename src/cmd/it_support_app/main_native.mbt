@@ -908,7 +908,7 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
       }
       Err(err) =>
         println(
-          "failed to load direct user names via direct-api: \{clip_for_error(err.to_string())}",
+          "failed to load direct user names via direct-api: token_len=\{token.length().to_string()} err=\{clip_for_error(err.to_string())}",
         )
     }
   } else {
@@ -949,6 +949,45 @@ async fn ensure_ticket_open_context(
 ) -> Unit {
   try_load_direct_user_names_once(state)
   fill_sender_names_from_cache(state, ticket_id)
+}
+
+///|
+fn resolve_sender_name_for_ingest(
+  state : AppState,
+  normalized : @adapters.NormalizedMessage,
+) -> String {
+  if normalized.sender_id == "" {
+    return normalized.sender_name
+  }
+  match state.direct_user_name_cache.val.get(normalized.sender_id) {
+    Some(name) =>
+      if name != "" {
+        name
+      } else if normalized.sender_name != "" {
+        normalized.sender_name
+      } else {
+        normalized.sender_id
+      }
+    None =>
+      if normalized.sender_name != "" {
+        normalized.sender_name
+      } else {
+        normalized.sender_id
+      }
+  }
+}
+
+///|
+fn normalize_inbound_sender_name(
+  state : AppState,
+  normalized : @adapters.NormalizedMessage,
+) -> @adapters.NormalizedMessage {
+  let resolved = resolve_sender_name_for_ingest(state, normalized)
+  if resolved == normalized.sender_name {
+    normalized
+  } else {
+    @adapters.NormalizedMessage::{ ..normalized, sender_name: resolved }
+  }
 }
 
 ///|
@@ -2187,20 +2226,14 @@ async fn handle_direct_incoming_async(
   ingest_ctx : @core.IngestContext,
   normalized : @adapters.NormalizedMessage,
 ) -> Unit {
+  try_load_direct_user_names_once(state)
   let normalized = rewrite_attachment_urls(state, normalized)
   let normalized = if state.dev_mode.val && normalized.raw_data != "" {
     @adapters.NormalizedMessage::{ ..normalized, text: normalized.raw_data }
   } else {
     normalized
   }
-  if normalized.sender_id != "" &&
-    normalized.sender_name != "" &&
-    normalized.sender_name != normalized.sender_id {
-    state.direct_user_name_cache.val.set(
-      normalized.sender_id,
-      normalized.sender_name,
-    )
-  }
+  let normalized = normalize_inbound_sender_name(state, normalized)
   if consume_outbound_echo(state, normalized.channel_id, normalized.text) {
     println(
       "ignored outbound echo from direct: channel=\{normalized.channel_id}",
