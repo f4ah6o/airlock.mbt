@@ -17,6 +17,7 @@ pub(all) enum IngestError {
 pub(all) struct IngestContext {
   ticket_repo : TicketRepository
   message_repo : MessageRepository
+  route_binding_repo : RouteBindingRepository
   generate_id : () -> String
   current_timestamp : () -> String
 }
@@ -28,13 +29,20 @@ pub fn IngestContext::new(
   message_repo : MessageRepository,
   generate_id : () -> String,
   current_timestamp : () -> String,
+  route_binding_repo? : RouteBindingRepository = RouteBindingRepository::new(),
 ) -> IngestContext {
-  { ticket_repo, message_repo, generate_id, current_timestamp }
+  {
+    ticket_repo,
+    message_repo,
+    route_binding_repo,
+    generate_id,
+    current_timestamp,
+  }
 }
 
 ///|
 fn inbound_key(message : @shared.InboundMessage) -> String {
-  "inbound:\{message.platform}:\{message.external_id}"
+  "inbound:\{message.platform}:\{message.bot_account_id}:\{message.external_id}"
 }
 
 ///|
@@ -70,17 +78,44 @@ fn ticket_subject(text : String) -> String {
 ///|
 fn find_ticket_by_channel(
   ticket_repo : TicketRepository,
+  group_id : String,
   platform : String,
   channel_id : String,
 ) -> @shared.Ticket? {
   for t in ticket_repo.list() {
-    if t.chat_a.platform == platform &&
+    if t.group_id == group_id &&
+      t.chat_a.platform == platform &&
       t.chat_a.dm_id == channel_id &&
       t.status != @shared.Closed {
       return Some(t)
     }
   }
   None
+}
+
+///|
+fn resolve_group_id(
+  ctx : IngestContext,
+  inbound : @shared.InboundMessage,
+) -> Result[String, IngestError] {
+  let default_group = @shared.default_group_id()
+  if inbound.bot_account_id == "" {
+    return Ok(default_group)
+  }
+  match
+    ctx.route_binding_repo.resolve(
+      inbound.platform,
+      inbound.bot_account_id,
+      inbound.channel_id,
+    ) {
+    Some(binding) => Ok(binding.group_id)
+    None =>
+      Err(
+        InvalidInput(
+          "route binding not found for platform=\{inbound.platform}, bot=\{inbound.bot_account_id}, channel=\{inbound.channel_id}",
+        ),
+      )
+  }
 }
 
 ///|
@@ -105,6 +140,10 @@ pub fn ingest_incoming(
     inbound.external_id == "" {
     return Err(InvalidInput("platform/channel_id/external_id are required"))
   }
+  let group_id = match resolve_group_id(ctx, inbound) {
+    Ok(id) => id
+    Err(err) => return Err(err)
+  }
   let dedupe_key = inbound_key(inbound)
   match ctx.message_repo.get_by_idempotency_key(dedupe_key) {
     Some(existing) =>
@@ -116,6 +155,7 @@ pub fn ingest_incoming(
   let ticket = match
     find_ticket_by_channel(
       ctx.ticket_repo,
+      group_id,
       inbound.platform,
       inbound.channel_id,
     ) {
@@ -130,7 +170,9 @@ pub fn ingest_incoming(
             inbound.platform,
             inbound.channel_id,
             inbound.external_id,
+            bot_account_id=inbound.bot_account_id,
           ),
+          group_id~,
         ),
         created_at: now,
         updated_at: now,
@@ -169,6 +211,7 @@ pub fn ingest_incoming(
       @shared.Public,
       @shared.ChatA,
       inbound.sender_id,
+      group_id~,
     ),
     sender_name,
     timestamp: if inbound.timestamp == "" {

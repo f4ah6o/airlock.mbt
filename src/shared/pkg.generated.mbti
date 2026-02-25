@@ -2,6 +2,7 @@
 package "airlock/airlock/shared"
 
 // Values
+pub fn default_group_id() -> String
 
 // Errors
 
@@ -39,9 +40,10 @@ pub impl Show for AttachmentType
 pub(all) struct ChatAMetadata {
   platform : String
   dm_id : String
+  bot_account_id : String
   last_inbound_cursor : String
 }
-pub fn ChatAMetadata::new(String, String, String) -> Self
+pub fn ChatAMetadata::new(String, String, String, bot_account_id? : String) -> Self
 pub impl Eq for ChatAMetadata
 pub impl Show for ChatAMetadata
 
@@ -56,9 +58,62 @@ pub fn DraftStatus::to_string(Self) -> String
 pub impl Eq for DraftStatus
 pub impl Show for DraftStatus
 
+pub(all) struct Group {
+  group_id : String
+  name : String
+  status : GroupStatus
+  created_at : String
+  updated_at : String
+}
+pub fn Group::new(String, String) -> Self
+pub impl Eq for Group
+pub impl Show for Group
+
+pub(all) struct GroupMember {
+  group_id : String
+  user_id : String
+  roles : Array[GroupRole]
+  active : Bool
+}
+pub fn GroupMember::can_post(Self) -> Bool
+pub fn GroupMember::can_view(Self) -> Bool
+pub fn GroupMember::has_role(Self, GroupRole) -> Bool
+pub fn GroupMember::new(String, String, roles? : Array[GroupRole]) -> Self
+pub impl Eq for GroupMember
+pub impl Show for GroupMember
+
+pub(all) enum GroupRole {
+  Owner
+  Manager
+  Agent
+  Viewer
+}
+pub fn GroupRole::to_string(Self) -> String
+pub impl Eq for GroupRole
+pub impl Show for GroupRole
+
+pub(all) enum GroupStatus {
+  Active
+  Archived
+}
+pub fn GroupStatus::to_string(Self) -> String
+pub impl Eq for GroupStatus
+pub impl Show for GroupStatus
+
+pub(all) struct Identity {
+  user_id : String
+  email : String
+  display_name : String
+  keycloak_sub : String
+}
+pub fn Identity::new(String, String, String, String) -> Self
+pub impl Eq for Identity
+pub impl Show for Identity
+
 pub(all) struct InboundMessage {
   external_id : String
   platform : String
+  bot_account_id : String
   channel_id : String
   sender_id : String
   sender_name : String
@@ -68,7 +123,7 @@ pub(all) struct InboundMessage {
   reply_to_id : String
   raw_data : String
 }
-pub fn InboundMessage::new(String, String, String, String, String, String, String) -> Self
+pub fn InboundMessage::new(String, String, String, String, String, String, String, bot_account_id? : String) -> Self
 pub impl Eq for InboundMessage
 pub impl Show for InboundMessage
 
@@ -89,6 +144,7 @@ pub impl Show for LogEntry
 pub(all) struct Message {
   message_id : String
   ticket_id : String
+  group_id : String
   text : String
   attachments : Array[Attachment]
   reply_to_message_id : String
@@ -100,11 +156,12 @@ pub(all) struct Message {
   idempotency_key : String
   published_at : String
   sender_id : String
+  sender_name : String
   timestamp : String
 }
-pub fn Message::new(String, String, String, Visibility, Origin, String) -> Self
-pub fn Message::new_draft(String, String, String, String, String) -> Self
-pub fn Message::new_note(String, String, String, String) -> Self
+pub fn Message::new(String, String, String, Visibility, Origin, String, group_id? : String) -> Self
+pub fn Message::new_draft(String, String, String, String, String, group_id? : String) -> Self
+pub fn Message::new_note(String, String, String, String, group_id? : String) -> Self
 pub impl Eq for Message
 pub impl Show for Message
 
@@ -117,8 +174,19 @@ pub fn Origin::to_string(Self) -> String
 pub impl Eq for Origin
 pub impl Show for Origin
 
+pub(all) struct RouteBinding {
+  platform : String
+  bot_account_id : String
+  channel_id : String
+  group_id : String
+}
+pub fn RouteBinding::new(String, String, String, String) -> Self
+pub impl Eq for RouteBinding
+pub impl Show for RouteBinding
+
 pub(all) struct Ticket {
   ticket_id : String
+  group_id : String
   status : TicketStatus
   subject : String
   chat_a : ChatAMetadata
@@ -128,7 +196,7 @@ pub(all) struct Ticket {
   created_at : String
   updated_at : String
 }
-pub fn Ticket::new(String, String, ChatAMetadata) -> Self
+pub fn Ticket::new(String, String, ChatAMetadata, group_id? : String) -> Self
 pub impl Eq for Ticket
 pub impl Show for Ticket
 

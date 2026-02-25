@@ -43,7 +43,8 @@ test "ingest_incoming creates ticket and message" {
       }
       assert_eq(msg.origin, @shared.ChatA)
       assert_eq(msg.visibility, @shared.Public)
-      assert_eq(msg.idempotency_key, "inbound:direct4b:ext_001")
+      assert_eq(msg.idempotency_key, "inbound:direct4b::ext_001")
+      assert_eq(msg.group_id, @shared.default_group_id())
     }
     _ => assert_true(false)
   }
@@ -130,4 +131,78 @@ test "ingest_incoming creates new ticket when existing channel ticket is closed"
     _ => assert_true(false)
   }
   assert_eq(ticket_repo.list().length(), 2)
+}
+
+///|
+test "ingest_incoming resolves group via route binding" {
+  let ticket_repo = TicketRepository::new()
+  let message_repo = MessageRepository::new()
+  let binding_repo = RouteBindingRepository::new()
+  binding_repo.upsert(
+    @shared.RouteBinding::new(
+      "direct4b", "bot@example.com", "room_bind", "grp-helpdesk",
+    ),
+  )
+  let ctx = IngestContext::new(
+    ticket_repo,
+    message_repo,
+    id_gen(),
+    test_now,
+    route_binding_repo=binding_repo,
+  )
+  let inbound = @shared.InboundMessage::new(
+    "ext_bind_001",
+    "direct4b",
+    "room_bind",
+    "user_001",
+    "alice",
+    "bound route message",
+    "2026-02-16T01:00:00Z",
+    bot_account_id="bot@example.com",
+  )
+  let result = ingest_incoming(ctx, inbound)
+  match result {
+    Ok(Created(ticket_id, message_id)) => {
+      let ticket = match ticket_repo.get(ticket_id) {
+        Ok(t) => t
+        Err(_) => {
+          assert_true(false)
+          @shared.Ticket::new("", "", @shared.ChatAMetadata::new("", "", ""))
+        }
+      }
+      assert_eq(ticket.group_id, "grp-helpdesk")
+      let message = match message_repo.get(message_id) {
+        Ok(m) => m
+        Err(_) => {
+          assert_true(false)
+          @shared.Message::new("", "", "", @shared.Public, @shared.ChatA, "")
+        }
+      }
+      assert_eq(message.group_id, "grp-helpdesk")
+      assert_eq(
+        message.idempotency_key,
+        "inbound:direct4b:bot@example.com:ext_bind_001",
+      )
+    }
+    _ => assert_true(false)
+  }
+}
+
+///|
+test "ingest_incoming rejects unknown route binding when bot_account_id is present" {
+  let ticket_repo = TicketRepository::new()
+  let message_repo = MessageRepository::new()
+  let ctx = IngestContext::new(ticket_repo, message_repo, id_gen(), test_now)
+  let inbound = @shared.InboundMessage::new(
+    "ext_bind_002",
+    "direct4b",
+    "room_unbound",
+    "user_001",
+    "alice",
+    "no binding",
+    "2026-02-16T01:00:00Z",
+    bot_account_id="bot@example.com",
+  )
+  let result = ingest_incoming(ctx, inbound)
+  assert_true(result is Err(InvalidInput(_)))
 }

@@ -17,6 +17,135 @@ pub fn TicketStatus::to_string(self : TicketStatus) -> String {
 }
 
 ///|
+/// Default group ID for bootstrap and backward-compatible migrations.
+pub fn default_group_id() -> String {
+  "grp-default"
+}
+
+///|
+/// Group role enum for RBAC.
+pub(all) enum GroupRole {
+  Owner
+  Manager
+  Agent
+  Viewer
+} derive(Show, Eq)
+
+///|
+pub fn GroupRole::to_string(self : GroupRole) -> String {
+  match self {
+    Owner => "owner"
+    Manager => "manager"
+    Agent => "agent"
+    Viewer => "viewer"
+  }
+}
+
+///|
+/// Group lifecycle status.
+pub(all) enum GroupStatus {
+  Active
+  Archived
+} derive(Show, Eq)
+
+///|
+pub fn GroupStatus::to_string(self : GroupStatus) -> String {
+  match self {
+    Active => "active"
+    Archived => "archived"
+  }
+}
+
+///|
+/// Group aggregate root for tenant boundary.
+pub(all) struct Group {
+  group_id : String
+  name : String
+  status : GroupStatus
+  created_at : String
+  updated_at : String
+} derive(Show, Eq)
+
+///|
+pub fn Group::new(group_id : String, name : String) -> Group {
+  { group_id, name, status: Active, created_at: "", updated_at: "" }
+}
+
+///|
+/// Group membership and RBAC assignment.
+pub(all) struct GroupMember {
+  group_id : String
+  user_id : String
+  roles : Array[GroupRole]
+  active : Bool
+} derive(Show, Eq)
+
+///|
+pub fn GroupMember::new(
+  group_id : String,
+  user_id : String,
+  roles? : Array[GroupRole] = [Agent],
+) -> GroupMember {
+  { group_id, user_id, roles, active: true }
+}
+
+///|
+pub fn GroupMember::has_role(self : GroupMember, role : GroupRole) -> Bool {
+  self.roles.contains(role)
+}
+
+///|
+pub fn GroupMember::can_view(self : GroupMember) -> Bool {
+  self.active
+}
+
+///|
+pub fn GroupMember::can_post(self : GroupMember) -> Bool {
+  if !self.active {
+    return false
+  }
+  self.has_role(Owner) || self.has_role(Manager) || self.has_role(Agent)
+}
+
+///|
+/// Shared identity shape for Keycloak-backed users.
+pub(all) struct Identity {
+  user_id : String
+  email : String
+  display_name : String
+  keycloak_sub : String
+} derive(Show, Eq)
+
+///|
+pub fn Identity::new(
+  user_id : String,
+  email : String,
+  display_name : String,
+  keycloak_sub : String,
+) -> Identity {
+  { user_id, email, display_name, keycloak_sub }
+}
+
+///|
+/// Route binding key: platform + bot account + channel.
+pub(all) struct RouteBinding {
+  platform : String
+  bot_account_id : String
+  channel_id : String
+  group_id : String
+} derive(Show, Eq)
+
+///|
+pub fn RouteBinding::new(
+  platform : String,
+  bot_account_id : String,
+  channel_id : String,
+  group_id : String,
+) -> RouteBinding {
+  { platform, bot_account_id, channel_id, group_id }
+}
+
+///|
 /// Message visibility enum
 pub(all) enum Visibility {
   Public // Shown in Pane 2 (Timeline)
@@ -111,6 +240,7 @@ pub fn Attachment::new(
 pub(all) struct ChatAMetadata {
   platform : String // e.g., "slack", "discord", "direct"
   dm_id : String // Channel/DM ID for sending
+  bot_account_id : String // Bot account (often email) used for routing
   last_inbound_cursor : String // Cursor for webhook recovery
 } derive(Show, Eq)
 
@@ -120,8 +250,9 @@ pub fn ChatAMetadata::new(
   platform : String,
   dm_id : String,
   last_inbound_cursor : String,
+  bot_account_id? : String = "",
 ) -> ChatAMetadata {
-  { platform, dm_id, last_inbound_cursor }
+  { platform, dm_id, bot_account_id, last_inbound_cursor }
 }
 
 ///|
@@ -129,6 +260,7 @@ pub fn ChatAMetadata::new(
 pub(all) struct InboundMessage {
   external_id : String
   platform : String
+  bot_account_id : String
   channel_id : String
   sender_id : String
   sender_name : String
@@ -149,10 +281,12 @@ pub fn InboundMessage::new(
   sender_name : String,
   text : String,
   timestamp : String,
+  bot_account_id? : String = "",
 ) -> InboundMessage {
   {
     external_id,
     platform,
+    bot_account_id,
     channel_id,
     sender_id,
     sender_name,
@@ -198,6 +332,7 @@ pub fn AICheckResult::fail(warnings : Array[String]) -> AICheckResult {
 /// Ticket data structure (Session)
 pub(all) struct Ticket {
   ticket_id : String
+  group_id : String
   status : TicketStatus
   subject : String
 
@@ -220,9 +355,11 @@ pub fn Ticket::new(
   ticket_id : String,
   subject : String,
   chat_a : ChatAMetadata,
+  group_id? : String = "grp-default",
 ) -> Ticket {
   {
     ticket_id,
+    group_id,
     status: Open,
     subject,
     chat_a,
@@ -239,6 +376,7 @@ pub fn Ticket::new(
 pub(all) struct Message {
   message_id : String
   ticket_id : String
+  group_id : String
 
   // Content
   text : String
@@ -273,10 +411,12 @@ pub fn Message::new(
   visibility : Visibility,
   origin : Origin,
   sender_id : String,
+  group_id? : String = "grp-default",
 ) -> Message {
   {
     message_id,
     ticket_id,
+    group_id,
     text,
     attachments: [],
     reply_to_message_id: "",
@@ -301,10 +441,12 @@ pub fn Message::new_draft(
   text : String,
   sender_id : String,
   idempotency_key : String,
+  group_id? : String = "grp-default",
 ) -> Message {
   {
     message_id,
     ticket_id,
+    group_id,
     text,
     attachments: [],
     reply_to_message_id: "",
@@ -328,10 +470,12 @@ pub fn Message::new_note(
   ticket_id : String,
   text : String,
   sender_id : String,
+  group_id? : String = "grp-default",
 ) -> Message {
   {
     message_id,
     ticket_id,
+    group_id,
     text,
     attachments: [],
     reply_to_message_id: "",

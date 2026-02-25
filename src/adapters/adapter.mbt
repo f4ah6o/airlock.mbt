@@ -3,6 +3,7 @@
 pub(all) struct NormalizedMessage {
   external_id : String // Platform-specific message ID
   platform : String // "direct", "slack", "discord", etc.
+  bot_account_id : String // Bot account (often email) used for routing
   channel_id : String // DM/Channel ID
   sender_id : String // Platform user ID
   sender_name : String // Display name
@@ -24,10 +25,12 @@ pub fn NormalizedMessage::new(
   sender_name : String,
   text : String,
   timestamp : String,
+  bot_account_id? : String = "",
 ) -> NormalizedMessage {
   {
     external_id,
     platform,
+    bot_account_id,
     channel_id,
     sender_id,
     sender_name,
@@ -48,6 +51,7 @@ pub fn NormalizedMessage::to_inbound(
   {
     external_id: self.external_id,
     platform: self.platform,
+    bot_account_id: self.bot_account_id,
     channel_id: self.channel_id,
     sender_id: self.sender_id,
     sender_name: self.sender_name,

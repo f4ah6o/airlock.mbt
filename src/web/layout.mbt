@@ -97,8 +97,14 @@ fn starts_with_at(text : String, start : Int, prefix : String) -> Bool {
 
 ///|
 fn is_url_terminator(ch : UInt16) -> Bool {
-  ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '<' || ch == '>' ||
-  ch == '"' || ch == '\''
+  ch == ' ' ||
+  ch == '\n' ||
+  ch == '\r' ||
+  ch == '\t' ||
+  ch == '<' ||
+  ch == '>' ||
+  ch == '"' ||
+  ch == '\''
 }
 
 ///|
@@ -106,7 +112,8 @@ fn url_encode_component(text : String) -> String {
   let sb = StringBuilder::new(size_hint=text.length() + 16)
   for c in text {
     let code = c.to_int()
-    let is_alpha_num = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) ||
+    let is_alpha_num = (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
       (code >= 97 && code <= 122)
     let is_safe = is_alpha_num || c == '-' || c == '_' || c == '.' || c == '~'
     if is_safe {
@@ -115,8 +122,20 @@ fn url_encode_component(text : String) -> String {
       sb.write_char('%')
       let hi = (code / 16) & 0xF
       let lo = code & 0xF
-      sb.write_char(if hi < 10 { Int::unsafe_to_char(48 + hi) } else { Int::unsafe_to_char(65 + hi - 10) })
-      sb.write_char(if lo < 10 { Int::unsafe_to_char(48 + lo) } else { Int::unsafe_to_char(65 + lo - 10) })
+      sb.write_char(
+        if hi < 10 {
+          Int::unsafe_to_char(48 + hi)
+        } else {
+          Int::unsafe_to_char(65 + hi - 10)
+        },
+      )
+      sb.write_char(
+        if lo < 10 {
+          Int::unsafe_to_char(48 + lo)
+        } else {
+          Int::unsafe_to_char(65 + lo - 10)
+        },
+      )
     }
   }
   sb.to_string()
@@ -158,7 +177,9 @@ fn render_text_with_auto_links(text : String) -> String {
     }
   }
   if plain_start < text.length() {
-    sb.write_string(escape_html_text(substring(text, plain_start, text.length())))
+    sb.write_string(
+      escape_html_text(substring(text, plain_start, text.length())),
+    )
   }
   sb.to_string()
 }
@@ -198,9 +219,12 @@ fn render_file_line_with_filename_link(line : String) -> String? {
     "/attachments/proxy?url=" + url_encode_component(raw_url)
   }
   Some(
-    escape_html_text(prefix) + "<a href=\"" + escape_html_text(href) +
+    escape_html_text(prefix) +
+    "<a href=\"" +
+    escape_html_text(href) +
     "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
-    escape_html_text(file_name) + "</a>",
+    escape_html_text(file_name) +
+    "</a>",
   )
 }
 
@@ -506,9 +530,7 @@ fn message_item(message : @shared.Message) -> @tmpx.Node {
       ),
     )
   }
-  @tmpx.li_parts(
-    parts([@tmpx.class_list(classes)], nodes),
-  )
+  @tmpx.li_parts(parts([@tmpx.class_list(classes)], nodes))
 }
 
 ///|
@@ -870,20 +892,14 @@ fn app_script() -> String {
     "});", "(function () {", "  if (typeof EventSource === 'undefined') { return; }",
     "  var hasNotificationPrompted = false;", "  var lastNotifiedVersion = -1;",
     "  var ensurePermission = function () {", "    if (hasNotificationPrompted) { return; }",
-    "    if (typeof Notification === 'undefined') { return; }",
-    "    if (Notification.permission !== 'default') { return; }",
-    "    hasNotificationPrompted = true;",
-    "    Notification.requestPermission().catch(function () {});",
+    "    if (typeof Notification === 'undefined') { return; }", "    if (Notification.permission !== 'default') { return; }",
+    "    hasNotificationPrompted = true;", "    Notification.requestPermission().catch(function () {});",
     "  };", "  document.addEventListener('click', ensurePermission, { once: true });",
     "  document.addEventListener('keydown', ensurePermission, { once: true });",
-    "  var notifyIfNeeded = function (payload) {",
-    "    if (typeof Notification === 'undefined') { return; }",
-    "    if (Notification.permission !== 'granted') { return; }",
-    "    if (!document.hidden && document.hasFocus && document.hasFocus()) { return; }",
-    "    if (!payload || typeof payload.version !== 'number') { return; }",
-    "    if (payload.version <= lastNotifiedVersion) { return; }",
-    "    lastNotifiedVersion = payload.version;",
-    "    var title = payload.subject ? String(payload.subject) : 'it-support-app';",
+    "  var notifyIfNeeded = function (payload) {", "    if (typeof Notification === 'undefined') { return; }",
+    "    if (Notification.permission !== 'granted') { return; }", "    if (!document.hidden && document.hasFocus && document.hasFocus()) { return; }",
+    "    if (!payload || typeof payload.version !== 'number') { return; }", "    if (payload.version <= lastNotifiedVersion) { return; }",
+    "    lastNotifiedVersion = payload.version;", "    var title = payload.subject ? String(payload.subject) : 'it-support-app';",
     "    var body = payload.preview ? String(payload.preview) : ('チケット ' + (payload.ticket_id || '-') + ' に新着メッセージ');",
     "    try { new Notification(title, { body: body, tag: 'ticket-' + (payload.ticket_id || 'unknown') }); } catch (_) {}",
     "  };", "  var eventSource = new EventSource('/events');", "  var refresh = function () {",
@@ -896,14 +912,9 @@ fn app_script() -> String {
     "    var right = document.getElementById('pane-right');", "    if (right) {",
     "      right.setAttribute('mx-get', '/partials/ticket/' + ticketId + '/right');",
     "      right.dispatchEvent(new Event('input', { bubbles: true }));", "    }",
-    "  };",
-    "  eventSource.addEventListener('ticket-updated', function (event) {",
-    "    var payload = {};",
-    "    try { payload = JSON.parse(event.data || '{}'); } catch (_) { payload = {}; }",
-    "    notifyIfNeeded(payload);",
-    "    refresh();",
-    "  });",
-    "  eventSource.addEventListener('message', refresh);",
+    "  };", "  eventSource.addEventListener('ticket-updated', function (event) {",
+    "    var payload = {};", "    try { payload = JSON.parse(event.data || '{}'); } catch (_) { payload = {}; }",
+    "    notifyIfNeeded(payload);", "    refresh();", "  });", "  eventSource.addEventListener('message', refresh);",
     "})();",
   ].join("\n")
 }

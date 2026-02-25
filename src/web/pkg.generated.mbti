@@ -10,6 +10,8 @@ pub fn render_center_partial(@shared.Ticket?, Array[@shared.Message], String?) -
 
 pub fn render_index(Array[@shared.Ticket], @shared.Ticket?, Array[@shared.Message], Array[@shared.Message]) -> String
 
+pub fn render_left_partial(Array[@shared.Ticket], String?) -> String
+
 pub fn render_right_partial(@shared.Ticket?, Array[@shared.Message], String?) -> String
 
 pub fn render_ticket_partial(Array[@shared.Ticket], @shared.Ticket?, Array[@shared.Message], Array[@shared.Message]) -> String

@@ -2,7 +2,6 @@
 package "airlock/airlock/core"
 
 import {
-  "airlock/airlock/logs",
   "airlock/airlock/shared",
 }
 
@@ -30,14 +29,34 @@ pub fn transition_draft_status(@shared.DraftStatus, @shared.DraftStatus) -> Resu
 // Errors
 
 // Types and methods
+pub(all) struct GroupMemberRepository {
+  members : Map[String, @shared.GroupMember]
+}
+pub fn GroupMemberRepository::can_post(Self, String, String) -> Bool
+pub fn GroupMemberRepository::get(Self, String, String) -> @shared.GroupMember?
+pub fn GroupMemberRepository::is_group_member(Self, String, String) -> Bool
+pub fn GroupMemberRepository::list_by_group(Self, String) -> Array[@shared.GroupMember]
+pub fn GroupMemberRepository::list_by_user(Self, String) -> Array[@shared.GroupMember]
+pub fn GroupMemberRepository::new() -> Self
+pub fn GroupMemberRepository::upsert(Self, @shared.GroupMember) -> Unit
+
+pub(all) struct GroupRepository {
+  groups : Map[String, @shared.Group]
+}
+pub fn GroupRepository::create(Self, @shared.Group) -> Result[Unit, RepositoryError]
+pub fn GroupRepository::get(Self, String) -> Result[@shared.Group, RepositoryError]
+pub fn GroupRepository::list(Self) -> Array[@shared.Group]
+pub fn GroupRepository::new() -> Self
+pub fn GroupRepository::upsert(Self, @shared.Group) -> Unit
+
 pub(all) struct IngestContext {
   ticket_repo : TicketRepository
   message_repo : MessageRepository
+  route_binding_repo : RouteBindingRepository
   generate_id : () -> String
   current_timestamp : () -> String
-  log_store : @logs.LogStore?
 }
-pub fn IngestContext::new(TicketRepository, MessageRepository, () -> String, () -> String, log_store? : @logs.LogStore) -> Self
+pub fn IngestContext::new(TicketRepository, MessageRepository, () -> String, () -> String, route_binding_repo? : RouteBindingRepository) -> Self
 
 pub(all) enum IngestError {
   InvalidInput(String)
@@ -63,8 +82,11 @@ pub fn MessageRepository::delete(Self, String) -> Result[Unit, RepositoryError]
 pub fn MessageRepository::get(Self, String) -> Result[@shared.Message, RepositoryError]
 pub fn MessageRepository::get_by_idempotency_key(Self, String) -> @shared.Message?
 pub fn MessageRepository::has_idempotency_key(Self, String) -> Bool
+pub fn MessageRepository::list_by_group(Self, String) -> Array[@shared.Message]
 pub fn MessageRepository::list_by_ticket(Self, String) -> Array[@shared.Message]
 pub fn MessageRepository::list_drafts_by_ticket(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::list_internal_by_group(Self, String) -> Array[@shared.Message]
+pub fn MessageRepository::list_public_by_group(Self, String) -> Array[@shared.Message]
 pub fn MessageRepository::list_public_by_ticket(Self, String) -> Array[@shared.Message]
 pub fn MessageRepository::list_workspace_by_ticket(Self, String) -> Array[@shared.Message]
 pub fn MessageRepository::new() -> Self
@@ -78,6 +100,16 @@ pub(all) enum RepositoryError {
 }
 pub impl Eq for RepositoryError
 pub impl Show for RepositoryError
+
+pub(all) struct RouteBindingRepository {
+  bindings : Map[String, @shared.RouteBinding]
+}
+pub fn RouteBindingRepository::delete(Self, String, String, String) -> Unit
+pub fn RouteBindingRepository::list(Self) -> Array[@shared.RouteBinding]
+pub fn RouteBindingRepository::list_by_group(Self, String) -> Array[@shared.RouteBinding]
+pub fn RouteBindingRepository::new() -> Self
+pub fn RouteBindingRepository::resolve(Self, String, String, String) -> @shared.RouteBinding?
+pub fn RouteBindingRepository::upsert(Self, @shared.RouteBinding) -> Unit
 
 pub(all) enum StateTransitionError {
   InvalidTransition(String)
@@ -95,6 +127,8 @@ pub fn TicketRepository::create(Self, @shared.Ticket) -> Result[Unit, Repository
 pub fn TicketRepository::delete(Self, String) -> Result[Unit, RepositoryError]
 pub fn TicketRepository::get(Self, String) -> Result[@shared.Ticket, RepositoryError]
 pub fn TicketRepository::list(Self) -> Array[@shared.Ticket]
+pub fn TicketRepository::list_by_group(Self, String) -> Array[@shared.Ticket]
+pub fn TicketRepository::list_by_group_and_status(Self, String, @shared.TicketStatus) -> Array[@shared.Ticket]
 pub fn TicketRepository::list_by_status(Self, @shared.TicketStatus) -> Array[@shared.Ticket]
 pub fn TicketRepository::new() -> Self
 pub fn TicketRepository::update(Self, @shared.Ticket) -> Result[Unit, RepositoryError]

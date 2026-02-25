@@ -8,6 +8,8 @@ package "airlock/airlock/cmd/it_support_app"
 // Types and methods
 type AppState
 
+type DirectStartupConfig
+
 // Type aliases
 
 // Traits

@@ -12,7 +12,15 @@ pub fn attempt_reconnect(RealtimeState) -> RealtimeState
 
 pub fn handle_create_draft(AppContext, RequestContext, String) -> ApiResponse
 
+pub fn handle_create_group_note(AppContext, RequestContext, String) -> ApiResponse
+
 pub fn handle_create_note(AppContext, RequestContext, String) -> ApiResponse
+
+pub fn handle_get_group_chat(AppContext, RequestContext, String) -> ApiResponse
+
+pub fn handle_get_group_notes(AppContext, RequestContext, String) -> ApiResponse
+
+pub fn handle_get_group_ticket(AppContext, RequestContext, String, String) -> ApiResponse
 
 pub fn handle_get_ticket(AppContext, String) -> ApiResponse
 
@@ -20,11 +28,15 @@ pub fn handle_get_timeline(AppContext, String) -> ApiResponse
 
 pub fn handle_get_workspace_items(AppContext, String) -> ApiResponse
 
+pub fn handle_list_group_tickets(AppContext, RequestContext, String) -> ApiResponse
+
 pub fn handle_list_tickets(AppContext, RequestContext) -> ApiResponse
 
 pub fn handle_publish_draft(AppContext, RequestContext, String, String) -> ApiResponse
 
 pub fn handle_recheck_draft(AppContext, RequestContext, String, String) -> ApiResponse
+
+pub fn handle_reply_group_ticket(AppContext, RequestContext, String, String) -> ApiResponse
 
 pub fn handle_request(AppContext, RequestContext) -> ApiResponse
 
@@ -95,11 +107,12 @@ pub impl Show for ApiResponse
 pub(all) struct AppContext {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
+  group_member_repo : @core.GroupMemberRepository
   current_timestamp : () -> String
   generate_id : () -> String
   log_store : @logs.LogStore?
 }
-pub fn AppContext::new(@core.TicketRepository, @core.MessageRepository, () -> String, () -> String, log_store? : @logs.LogStore) -> Self
+pub fn AppContext::new(@core.TicketRepository, @core.MessageRepository, () -> String, () -> String, group_member_repo? : @core.GroupMemberRepository, log_store? : @logs.LogStore) -> Self
 
 pub(all) struct AppState {
   view : AppViewState
@@ -219,6 +232,12 @@ pub impl Eq for RequestContext
 pub impl Show for RequestContext
 
 pub(all) enum Route {
+  ListGroupTickets(String)
+  GetGroupChat(String)
+  GetGroupNotes(String)
+  CreateGroupNote(String)
+  GetGroupTicket(String, String)
+  ReplyGroupTicket(String, String)
   ListTickets
   GetTicket(String)
   GetTimeline(String)

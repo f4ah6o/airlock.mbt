@@ -40,6 +40,7 @@ test "Ticket creation" {
   assert_eq(ticket.subject, "VPN Error")
   assert_eq(ticket.status, TicketStatus::Open)
   assert_eq(ticket.chat_a.platform, "slack")
+  assert_eq(ticket.group_id, default_group_id())
   assert_eq(ticket.lock_version, 1)
 }
 
@@ -108,5 +109,38 @@ test "InboundMessage creation" {
   assert_eq(inbound.external_id, "ext_001")
   assert_eq(inbound.platform, "direct4b")
   assert_eq(inbound.channel_id, "room_123")
+  assert_eq(inbound.bot_account_id, "")
   assert_eq(inbound.attachments.length(), 0)
+}
+
+///|
+test "GroupRole and GroupMember helpers" {
+  assert_eq(GroupRole::Owner.to_string(), "owner")
+  assert_eq(GroupRole::Viewer.to_string(), "viewer")
+  let group_member = GroupMember::new("grp_001", "user_001", roles=[Agent])
+  assert_true(group_member.can_view())
+  assert_true(group_member.can_post())
+  let viewer = GroupMember::new("grp_001", "user_002", roles=[Viewer])
+  assert_false(viewer.can_post())
+}
+
+///|
+test "Group and RouteBinding creation" {
+  let group = Group::new("grp_001", "Support L1")
+  assert_eq(group.group_id, "grp_001")
+  assert_eq(group.status, GroupStatus::Active)
+  let binding = RouteBinding::new(
+    "direct4b", "bot@example.com", "room_001", "grp_001",
+  )
+  assert_eq(binding.bot_account_id, "bot@example.com")
+  assert_eq(binding.group_id, "grp_001")
+}
+
+///|
+test "Identity creation" {
+  let identity = Identity::new(
+    "user_001", "alice@example.com", "Alice", "sub_001",
+  )
+  assert_eq(identity.user_id, "user_001")
+  assert_eq(identity.keycloak_sub, "sub_001")
 }

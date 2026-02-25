@@ -55,18 +55,29 @@ pub(all) struct DirectAdapter {
   config : AdapterConfig
   client : @client.Client
   mut state : AdapterState
+  mut self_user_id : String
 }
 pub async fn DirectAdapter::connect(Self, @async.TaskGroup[Unit]) -> Result[Unit, AdapterError]
+pub async fn DirectAdapter::create_download_auth(Self, String, talk_id? : String, message_id? : String) -> Result[DownloadAuth, AdapterError]
 pub fn DirectAdapter::disconnect(Self) -> Result[Unit, AdapterError]
+pub async fn DirectAdapter::fetch_known_user_names(Self) -> Result[Array[(String, String)], AdapterError]
 pub fn DirectAdapter::listen_incoming(Self, (NormalizedMessage) -> Unit) -> Unit
 pub fn DirectAdapter::new(AdapterConfig, endpoint? : String, proxy_url? : String, bot_name? : String, debug? : Bool, timeout_ms? : Int) -> Self
 pub fn DirectAdapter::platform_name(Self) -> String
 pub async fn DirectAdapter::send_outbound(Self, OutboundMessage) -> Result[SendResult, AdapterError]
 pub fn DirectAdapter::state(Self) -> AdapterState
 
+pub(all) struct DownloadAuth {
+  url : String
+  headers : Map[String, String]
+}
+pub impl Eq for DownloadAuth
+pub impl Show for DownloadAuth
+
 pub(all) struct NormalizedMessage {
   external_id : String
   platform : String
+  bot_account_id : String
   channel_id : String
   sender_id : String
   sender_name : String
@@ -77,7 +88,7 @@ pub(all) struct NormalizedMessage {
   reply_to_id : String
   raw_data : String
 }
-pub fn NormalizedMessage::new(String, String, String, String, String, String, String) -> Self
+pub fn NormalizedMessage::new(String, String, String, String, String, String, String, bot_account_id? : String) -> Self
 pub fn NormalizedMessage::to_inbound(Self) -> @shared.InboundMessage
 pub impl Eq for NormalizedMessage
 pub impl Show for NormalizedMessage

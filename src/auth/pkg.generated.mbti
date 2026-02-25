@@ -1,0 +1,61 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "airlock/airlock/auth"
+
+import {
+  "airlock/airlock/shared",
+}
+
+// Values
+pub fn build_keycloak_login_url(AuthConfig, String) -> String
+
+pub fn principal_from_headers(AuthConfig, Array[(String, String)]) -> Result[Principal, AuthError]
+
+pub fn require_group_access(Principal, String, write? : Bool) -> Result[Unit, AuthError]
+
+// Errors
+
+// Types and methods
+pub(all) struct AuthConfig {
+  keycloak_issuer : String
+  keycloak_realm : String
+  keycloak_client_id : String
+  keycloak_auth_base_url : String
+  public_base_url : String
+  strict_mode : Bool
+  header_user_id : String
+  header_email : String
+  header_name : String
+  header_subject : String
+  header_groups : String
+  header_roles : String
+}
+pub fn AuthConfig::default() -> Self
+pub impl Eq for AuthConfig
+pub impl Show for AuthConfig
+
+pub(all) enum AuthError {
+  MissingIdentity
+  Unauthorized(String)
+  Forbidden(String)
+  InvalidGroup(String)
+  InvalidConfig(String)
+}
+pub impl Eq for AuthError
+pub impl Show for AuthError
+
+pub(all) struct Principal {
+  identity : @shared.Identity
+  group_ids : Array[String]
+  group_roles : Map[String, Array[@shared.GroupRole]]
+  raw_token : String
+}
+pub fn Principal::can_manage(Self, String) -> Bool
+pub fn Principal::can_post(Self, String) -> Bool
+pub fn Principal::is_group_member(Self, String) -> Bool
+pub impl Eq for Principal
+pub impl Show for Principal
+
+// Type aliases
+
+// Traits
+

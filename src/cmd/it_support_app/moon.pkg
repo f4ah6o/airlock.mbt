@@ -1,5 +1,6 @@
 import {
   "airlock/airlock/adapters" @adapters,
+  "airlock/airlock/auth" @auth,
   "airlock/airlock/core" @core,
   "airlock/airlock/shared" @shared,
   "airlock/airlock/web" @web,

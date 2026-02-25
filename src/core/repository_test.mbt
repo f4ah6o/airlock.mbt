@@ -243,3 +243,83 @@ test "MessageRepository has idempotency key" {
   assert_true(repo.has_idempotency_key("key_123"))
   assert_false(repo.has_idempotency_key("other_key"))
 }
+
+///|
+test "TicketRepository list by group" {
+  let repo = TicketRepository::new()
+  let chat_a = @shared.ChatAMetadata::new("direct4b", "dm_001", "cursor")
+  let t1 = @shared.Ticket::new("tkt_001", "Group A", chat_a, group_id="grp-a")
+  let t2 = @shared.Ticket::new("tkt_002", "Group B", chat_a, group_id="grp-b")
+  let _ = repo.create(t1)
+  let _ = repo.create(t2)
+  let a_tickets = repo.list_by_group("grp-a")
+  assert_eq(a_tickets.length(), 1)
+  assert_eq(a_tickets[0].group_id, "grp-a")
+}
+
+///|
+test "MessageRepository list by group and visibility" {
+  let repo = MessageRepository::new()
+  let msg1 = @shared.Message::new(
+    "msg_001",
+    "tkt_001",
+    "public a",
+    @shared.Visibility::Public,
+    @shared.Origin::ChatA,
+    "user_001",
+    group_id="grp-a",
+  )
+  let msg2 = @shared.Message::new_note(
+    "msg_002",
+    "tkt_001",
+    "note a",
+    "agent",
+    group_id="grp-a",
+  )
+  let msg3 = @shared.Message::new(
+    "msg_003",
+    "tkt_002",
+    "public b",
+    @shared.Visibility::Public,
+    @shared.Origin::ChatA,
+    "user_002",
+    group_id="grp-b",
+  )
+  let _ = repo.create(msg1)
+  let _ = repo.create(msg2)
+  let _ = repo.create(msg3)
+  assert_eq(repo.list_by_group("grp-a").length(), 2)
+  assert_eq(repo.list_public_by_group("grp-a").length(), 1)
+  assert_eq(repo.list_internal_by_group("grp-a").length(), 1)
+}
+
+///|
+test "RouteBindingRepository resolve" {
+  let repo = RouteBindingRepository::new()
+  repo.upsert(
+    @shared.RouteBinding::new(
+      "direct4b", "bot@example.com", "room-1", "grp-help",
+    ),
+  )
+  let found = repo.resolve("direct4b", "bot@example.com", "room-1")
+  match found {
+    Some(binding) => assert_eq(binding.group_id, "grp-help")
+    None => assert_true(false)
+  }
+  repo.delete("direct4b", "bot@example.com", "room-1")
+  assert_true(repo.resolve("direct4b", "bot@example.com", "room-1") is None)
+}
+
+///|
+test "GroupMemberRepository permission checks" {
+  let repo = GroupMemberRepository::new()
+  repo.upsert(
+    @shared.GroupMember::new("grp-a", "user-1", roles=[@shared.Viewer]),
+  )
+  repo.upsert(
+    @shared.GroupMember::new("grp-a", "agent-1", roles=[@shared.Agent]),
+  )
+  assert_true(repo.is_group_member("grp-a", "user-1"))
+  assert_false(repo.can_post("grp-a", "user-1"))
+  assert_true(repo.can_post("grp-a", "agent-1"))
+}

@@ -11,6 +11,7 @@
 pub(all) struct AppContext {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
+  group_member_repo : @core.GroupMemberRepository
   current_timestamp : () -> String // Function to get current time
   generate_id : () -> String // Function to generate unique IDs
   log_store : @logs.LogStore?
@@ -23,9 +24,17 @@ pub fn AppContext::new(
   message_repo : @core.MessageRepository,
   current_timestamp : () -> String,
   generate_id : () -> String,
+  group_member_repo? : @core.GroupMemberRepository = @core.GroupMemberRepository::new(),
   log_store? : @logs.LogStore,
 ) -> AppContext {
-  { ticket_repo, message_repo, current_timestamp, generate_id, log_store }
+  {
+    ticket_repo,
+    message_repo,
+    group_member_repo,
+    current_timestamp,
+    generate_id,
+    log_store,
+  }
 }
 
 /// =============================================================================
@@ -35,6 +44,14 @@ pub fn AppContext::new(
 ///|
 /// Parsed route information
 pub(all) enum Route {
+  // Group routes (group-first)
+  ListGroupTickets(String) // GET /api/groups/{group_id}/tickets
+  GetGroupChat(String) // GET /api/groups/{group_id}/chat
+  GetGroupNotes(String) // GET /api/groups/{group_id}/notes
+  CreateGroupNote(String) // POST /api/groups/{group_id}/notes
+  GetGroupTicket(String, String) // GET /api/groups/{group_id}/tickets/{ticket_id}
+  ReplyGroupTicket(String, String) // POST /api/groups/{group_id}/tickets/{ticket_id}/reply
+
   // Ticket routes
   ListTickets // GET /api/tickets
   GetTicket(String) // GET /api/tickets/{id}
@@ -60,51 +77,81 @@ pub fn parse_route(http_method : HttpMethod, path : String) -> Route {
   let parts = split_path(path)
   let len = parts.length()
 
-  // Check if path starts with /api/tickets
-  if len < 2 || parts[0] != "api" || parts[1] != "tickets" {
-    return NotFound
-  }
-  match http_method {
-    Get =>
-      if len == 2 {
-        // GET /api/tickets
-        ListTickets
-      } else if len == 3 {
-        // GET /api/tickets/{id}
-        GetTicket(parts[2])
-      } else if len == 4 && parts[3] == "timeline" {
-        // GET /api/tickets/{id}/timeline
-        GetTimeline(parts[2])
-      } else if len == 4 && parts[3] == "items" {
-        // GET /api/tickets/{id}/items
-        GetWorkspaceItems(parts[2])
-      } else {
-        NotFound
-      }
-    Post =>
-      if len == 4 && parts[3] == "notes" {
-        // POST /api/tickets/{id}/notes
-        CreateNote(parts[2])
-      } else if len == 4 && parts[3] == "drafts" {
-        // POST /api/tickets/{id}/drafts
-        CreateDraft(parts[2])
-      } else if len == 6 && parts[3] == "drafts" && parts[5] == "recheck" {
-        // POST /api/tickets/{id}/drafts/{msgId}/recheck
-        RecheckDraft(parts[2], parts[4])
-      } else if len == 6 && parts[3] == "drafts" && parts[5] == "publish" {
-        // POST /api/tickets/{id}/drafts/{msgId}/publish
-        PublishDraft(parts[2], parts[4])
-      } else {
-        NotFound
-      }
-    Put =>
-      if len == 5 && parts[3] == "drafts" {
-        // PUT /api/tickets/{id}/drafts/{msgId}
-        UpdateDraft(parts[2], parts[4])
-      } else {
-        NotFound
-      }
-    Delete => NotFound
+  // Group-first routes:
+  // /api/groups/{group_id}/...
+  if len >= 3 && parts[0] == "api" && parts[1] == "groups" {
+    let group_id = parts[2]
+    match http_method {
+      Get =>
+        if len == 4 && parts[3] == "tickets" {
+          ListGroupTickets(group_id)
+        } else if len == 4 && parts[3] == "chat" {
+          GetGroupChat(group_id)
+        } else if len == 4 && parts[3] == "notes" {
+          GetGroupNotes(group_id)
+        } else if len == 5 && parts[3] == "tickets" {
+          GetGroupTicket(group_id, parts[4])
+        } else {
+          NotFound
+        }
+      Post =>
+        if len == 4 && parts[3] == "notes" {
+          CreateGroupNote(group_id)
+        } else if len == 6 && parts[3] == "tickets" && parts[5] == "reply" {
+          ReplyGroupTicket(group_id, parts[4])
+        } else {
+          NotFound
+        }
+      _ => NotFound
+    }
+  } else {
+
+    // Legacy ticket routes.
+    if len < 2 || parts[0] != "api" || parts[1] != "tickets" {
+      return NotFound
+    }
+    match http_method {
+      Get =>
+        if len == 2 {
+          // GET /api/tickets
+          ListTickets
+        } else if len == 3 {
+          // GET /api/tickets/{id}
+          GetTicket(parts[2])
+        } else if len == 4 && parts[3] == "timeline" {
+          // GET /api/tickets/{id}/timeline
+          GetTimeline(parts[2])
+        } else if len == 4 && parts[3] == "items" {
+          // GET /api/tickets/{id}/items
+          GetWorkspaceItems(parts[2])
+        } else {
+          NotFound
+        }
+      Post =>
+        if len == 4 && parts[3] == "notes" {
+          // POST /api/tickets/{id}/notes
+          CreateNote(parts[2])
+        } else if len == 4 && parts[3] == "drafts" {
+          // POST /api/tickets/{id}/drafts
+          CreateDraft(parts[2])
+        } else if len == 6 && parts[3] == "drafts" && parts[5] == "recheck" {
+          // POST /api/tickets/{id}/drafts/{msgId}/recheck
+          RecheckDraft(parts[2], parts[4])
+        } else if len == 6 && parts[3] == "drafts" && parts[5] == "publish" {
+          // POST /api/tickets/{id}/drafts/{msgId}/publish
+          PublishDraft(parts[2], parts[4])
+        } else {
+          NotFound
+        }
+      Put =>
+        if len == 5 && parts[3] == "drafts" {
+          // PUT /api/tickets/{id}/drafts/{msgId}
+          UpdateDraft(parts[2], parts[4])
+        } else {
+          NotFound
+        }
+      Delete => NotFound
+    }
   }
 }
 
@@ -121,7 +168,7 @@ fn split_path(path : String) -> Array[String] {
         current = ""
       }
     } else {
-      current = current + c.to_string()
+      current = current + c.unsafe_to_char().to_string()
     }
   }
   if current != "" {
@@ -139,6 +186,14 @@ fn split_path(path : String) -> Array[String] {
 pub fn handle_request(ctx : AppContext, req : RequestContext) -> ApiResponse {
   let route = parse_route(req.http_method, req.path)
   match route {
+    ListGroupTickets(group_id) => handle_list_group_tickets(ctx, req, group_id)
+    GetGroupChat(group_id) => handle_get_group_chat(ctx, req, group_id)
+    GetGroupNotes(group_id) => handle_get_group_notes(ctx, req, group_id)
+    CreateGroupNote(group_id) => handle_create_group_note(ctx, req, group_id)
+    GetGroupTicket(group_id, ticket_id) =>
+      handle_get_group_ticket(ctx, req, group_id, ticket_id)
+    ReplyGroupTicket(group_id, ticket_id) =>
+      handle_reply_group_ticket(ctx, req, group_id, ticket_id)
     ListTickets => handle_list_tickets(ctx, req)
     GetTicket(id) => handle_get_ticket(ctx, id)
     GetTimeline(id) => handle_get_timeline(ctx, id)
@@ -198,6 +253,249 @@ fn record_message_log(
     created_at,
   }
   record_log(ctx, entry)
+}
+
+/// =============================================================================
+/// Group Authorization Helpers
+/// =============================================================================
+
+///|
+fn authorize_group(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+  write? : Bool = false,
+) -> ApiError? {
+  if req.user_id == "" {
+    return Some(ApiError::Unauthorized("Authentication required"))
+  }
+  if group_id == "" {
+    return Some(ApiError::BadRequest("group_id is required"))
+  }
+  if !ctx.group_member_repo.is_group_member(group_id, req.user_id) {
+    return Some(
+      ApiError::Forbidden("User is not a member of group \{group_id}"),
+    )
+  }
+  if write && !ctx.group_member_repo.can_post(group_id, req.user_id) {
+    return Some(
+      ApiError::Forbidden("User has no post permission in group \{group_id}"),
+    )
+  }
+  None
+}
+
+///|
+fn ensure_group_default_ticket(
+  ctx : AppContext,
+  group_id : String,
+) -> @shared.Ticket {
+  let tickets = ctx.ticket_repo.list_by_group(group_id)
+  if !tickets.is_empty() {
+    return tickets[0]
+  }
+  let ticket_id = "grp-\{group_id}-\{(ctx.generate_id)()}"
+  let now = (ctx.current_timestamp)()
+  let ticket = @shared.Ticket::{
+    ..@shared.Ticket::new(
+      ticket_id,
+      "Group chat",
+      @shared.ChatAMetadata::new("group", group_id, ""),
+      group_id~,
+    ),
+    created_at: now,
+    updated_at: now,
+  }
+  let _ = ctx.ticket_repo.create(ticket)
+  ticket
+}
+
+/// =============================================================================
+/// Group Handlers (Group-first API)
+/// =============================================================================
+
+///|
+pub fn handle_list_group_tickets(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  let status = if req.path.contains("status=open") {
+    Some(@shared.TicketStatus::Open)
+  } else if req.path.contains("status=closed") {
+    Some(@shared.TicketStatus::Closed)
+  } else if req.path.contains("status=pending") {
+    Some(@shared.TicketStatus::Pending)
+  } else {
+    None
+  }
+  let tickets = match status {
+    Some(s) => ctx.ticket_repo.list_by_group_and_status(group_id, s)
+    None => ctx.ticket_repo.list_by_group(group_id)
+  }
+  ApiResponse::ok(tickets_to_json(tickets))
+}
+
+///|
+pub fn handle_get_group_chat(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  let messages = ctx.message_repo.list_public_by_group(group_id)
+  ApiResponse::ok(messages_to_json(messages))
+}
+
+///|
+pub fn handle_get_group_notes(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  let messages = ctx.message_repo.list_internal_by_group(group_id)
+  ApiResponse::ok(messages_to_json(messages))
+}
+
+///|
+pub fn handle_create_group_note(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id, write=true) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  let text = extract_json_field(req.body, "text")
+  if text == "" {
+    return ApiResponse::error(ApiError::BadRequest("Note text is required"))
+  }
+  let ticket = ensure_group_default_ticket(ctx, group_id)
+  let msg_id = (ctx.generate_id)()
+  let timestamp = (ctx.current_timestamp)()
+  let note = @shared.Message::{
+    ..@shared.Message::new_note(
+      msg_id,
+      ticket.ticket_id,
+      text,
+      req.user_id,
+      group_id~,
+    ),
+    timestamp,
+  }
+  match ctx.message_repo.create(note) {
+    Ok(_) => {
+      record_message_log(
+        ctx,
+        "group_note_created",
+        note,
+        req.user_id,
+        message_to_json(note),
+        note.timestamp,
+      )
+      ApiResponse::created(message_to_json(note))
+    }
+    Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to create group note"))
+  }
+}
+
+///|
+pub fn handle_get_group_ticket(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+  ticket_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  match ctx.ticket_repo.get(ticket_id) {
+    Ok(ticket) =>
+      if ticket.group_id != group_id {
+        ApiResponse::error(ApiError::NotFound("Ticket not found in group"))
+      } else {
+        ApiResponse::ok(ticket_to_json(ticket))
+      }
+    Err(@core.NotFound(msg)) => ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      ApiResponse::error(ApiError::InternalError("Failed to get group ticket"))
+  }
+}
+
+///|
+pub fn handle_reply_group_ticket(
+  ctx : AppContext,
+  req : RequestContext,
+  group_id : String,
+  ticket_id : String,
+) -> ApiResponse {
+  match authorize_group(ctx, req, group_id, write=true) {
+    Some(err) => return ApiResponse::error(err)
+    None => ()
+  }
+  let ticket = match ctx.ticket_repo.get(ticket_id) {
+    Ok(v) => v
+    Err(@core.NotFound(msg)) =>
+      return ApiResponse::error(ApiError::NotFound(msg))
+    Err(_) =>
+      return ApiResponse::error(
+        ApiError::InternalError("Failed to get group ticket"),
+      )
+  }
+  if ticket.group_id != group_id {
+    return ApiResponse::error(ApiError::NotFound("Ticket not found in group"))
+  }
+  let text = extract_json_field(req.body, "text")
+  if text == "" {
+    return ApiResponse::error(ApiError::BadRequest("Reply text is required"))
+  }
+  let msg_id = (ctx.generate_id)()
+  let timestamp = (ctx.current_timestamp)()
+  let reply = @shared.Message::{
+    ..@shared.Message::new(
+      msg_id,
+      ticket_id,
+      text,
+      @shared.Public,
+      @shared.Console,
+      req.user_id,
+      group_id~,
+    ),
+    timestamp,
+  }
+  match ctx.message_repo.create(reply) {
+    Ok(_) => {
+      record_message_log(
+        ctx,
+        "group_ticket_replied",
+        reply,
+        req.user_id,
+        message_to_json(reply),
+        reply.timestamp,
+      )
+      ApiResponse::created(message_to_json(reply))
+    }
+    Err(@core.DuplicateKey(msg)) => ApiResponse::error(ApiError::Conflict(msg))
+    Err(_) =>
+      ApiResponse::error(
+        ApiError::InternalError("Failed to create group ticket reply"),
+      )
+  }
 }
 
 /// =============================================================================
@@ -290,12 +588,12 @@ pub fn handle_create_note(
   ticket_id : String,
 ) -> ApiResponse {
   // Verify ticket exists
-  match ctx.ticket_repo.get(ticket_id) {
+  let ticket = match ctx.ticket_repo.get(ticket_id) {
     Err(@core.NotFound(msg)) =>
       return ApiResponse::error(ApiError::NotFound(msg))
     Err(_) =>
       return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
-    Ok(_) => ()
+    Ok(t) => t
   }
 
   // Parse request body (simplified - in real impl use JSON parser)
@@ -308,7 +606,13 @@ pub fn handle_create_note(
   let msg_id = (ctx.generate_id)()
   let timestamp = (ctx.current_timestamp)()
   let note = @shared.Message::{
-    ..@shared.Message::new_note(msg_id, ticket_id, text, req.user_id),
+    ..@shared.Message::new_note(
+      msg_id,
+      ticket_id,
+      text,
+      req.user_id,
+      group_id=ticket.group_id,
+    ),
     timestamp,
   }
 
@@ -339,12 +643,12 @@ pub fn handle_create_draft(
   ticket_id : String,
 ) -> ApiResponse {
   // Verify ticket exists
-  match ctx.ticket_repo.get(ticket_id) {
+  let ticket = match ctx.ticket_repo.get(ticket_id) {
     Err(@core.NotFound(msg)) =>
       return ApiResponse::error(ApiError::NotFound(msg))
     Err(_) =>
       return ApiResponse::error(ApiError::InternalError("Failed to get ticket"))
-    Ok(_) => ()
+    Ok(t) => t
   }
 
   // Parse request body
@@ -375,6 +679,7 @@ pub fn handle_create_draft(
       text,
       req.user_id,
       idempotency_key,
+      group_id=ticket.group_id,
     ),
     timestamp,
   }
@@ -600,7 +905,7 @@ pub fn handle_publish_draft(
 ///|
 /// Convert ticket to JSON string
 pub fn ticket_to_json(ticket : @shared.Ticket) -> String {
-  "{\"ticket_id\":\"\{ticket.ticket_id}\",\"status\":\"\{ticket.status.to_string()}\",\"subject\":\"\{escape_json_string(ticket.subject)}\",\"assignees\":[\{array_to_json_strings(ticket.assignees)}],\"lock_version\":\{ticket.lock_version.to_string()},\"created_at\":\"\{ticket.created_at}\",\"updated_at\":\"\{ticket.updated_at}\"}"
+  "{\"ticket_id\":\"\{ticket.ticket_id}\",\"group_id\":\"\{ticket.group_id}\",\"status\":\"\{ticket.status.to_string()}\",\"subject\":\"\{escape_json_string(ticket.subject)}\",\"chat_a\":{\"platform\":\"\{escape_json_string(ticket.chat_a.platform)}\",\"dm_id\":\"\{escape_json_string(ticket.chat_a.dm_id)}\",\"bot_account_id\":\"\{escape_json_string(ticket.chat_a.bot_account_id)}\",\"last_inbound_cursor\":\"\{escape_json_string(ticket.chat_a.last_inbound_cursor)}\"},\"assignees\":[\{array_to_json_strings(ticket.assignees)}],\"lock_version\":\{ticket.lock_version.to_string()},\"created_at\":\"\{ticket.created_at}\",\"updated_at\":\"\{ticket.updated_at}\"}"
 }
 
 ///|
@@ -623,10 +928,10 @@ pub fn tickets_to_json(tickets : Array[@shared.Ticket]) -> String {
 pub fn message_to_json(msg : @shared.Message) -> String {
   let ai_check = match msg.ai_check_result {
     Some(r) =>
-      "{\"passed\":\{r.passed.to_string()},\"warnings\":[\{array_to_json_strings(r.warnings)}]}"
+      "{\"passed\":\{r.passed.to_string()},\"warnings\":[\{array_to_json_strings(r.warnings)}],\"suggestions\":[\{array_to_json_strings(r.suggestions)}]}"
     None => "null"
   }
-  "{\"message_id\":\"\{msg.message_id}\",\"ticket_id\":\"\{msg.ticket_id}\",\"text\":\"\{escape_json_string(msg.text)}\",\"visibility\":\"\{msg.visibility.to_string()}\",\"origin\":\"\{msg.origin.to_string()}\",\"is_draft\":\{msg.is_draft.to_string()},\"draft_status\":\"\{msg.draft_status.to_string()}\",\"ai_check_result\":\{ai_check},\"sender_id\":\"\{msg.sender_id}\",\"sender_name\":\"\{escape_json_string(msg.sender_name)}\",\"timestamp\":\"\{msg.timestamp}\",\"published_at\":\"\{msg.published_at}\"}"
+  "{\"message_id\":\"\{msg.message_id}\",\"ticket_id\":\"\{msg.ticket_id}\",\"group_id\":\"\{msg.group_id}\",\"text\":\"\{escape_json_string(msg.text)}\",\"attachments\":[\{attachments_to_json(msg.attachments)}],\"reply_to_message_id\":\"\{escape_json_string(msg.reply_to_message_id)}\",\"visibility\":\"\{msg.visibility.to_string()}\",\"origin\":\"\{msg.origin.to_string()}\",\"is_draft\":\{msg.is_draft.to_string()},\"draft_status\":\"\{msg.draft_status.to_string()}\",\"ai_check_result\":\{ai_check},\"idempotency_key\":\"\{escape_json_string(msg.idempotency_key)}\",\"sender_id\":\"\{msg.sender_id}\",\"sender_name\":\"\{escape_json_string(msg.sender_name)}\",\"timestamp\":\"\{msg.timestamp}\",\"published_at\":\"\{msg.published_at}\"}"
 }
 
 ///|
@@ -656,6 +961,16 @@ fn array_to_json_strings(arr : Array[String]) -> String {
       acc + "," + item
     }
   })
+}
+
+///|
+fn attachment_to_json(att : @shared.Attachment) -> String {
+  "{\"type\":\"\{att.attachment_type.to_string()}\",\"url\":\"\{escape_json_string(att.url)}\",\"name\":\"\{escape_json_string(att.name)}\"}"
+}
+
+///|
+fn attachments_to_json(arr : Array[@shared.Attachment]) -> String {
+  arr.map(attachment_to_json).join(",")
 }
 
 ///|

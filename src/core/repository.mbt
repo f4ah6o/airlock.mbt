@@ -101,6 +101,28 @@ pub fn TicketRepository::list_by_status(
 }
 
 ///|
+/// List tickets by group.
+pub fn TicketRepository::list_by_group(
+  self : TicketRepository,
+  group_id : String,
+) -> Array[@shared.Ticket] {
+  self.tickets.values().filter(fn(t) { t.group_id == group_id }).collect()
+}
+
+///|
+/// List tickets by group and status.
+pub fn TicketRepository::list_by_group_and_status(
+  self : TicketRepository,
+  group_id : String,
+  status : @shared.TicketStatus,
+) -> Array[@shared.Ticket] {
+  self.tickets
+  .values()
+  .filter(fn(t) { t.group_id == group_id && t.status == status })
+  .collect()
+}
+
+///|
 /// In-memory Message repository
 pub(all) struct MessageRepository {
   messages : Map[String, @shared.Message]
@@ -268,4 +290,230 @@ pub fn MessageRepository::has_idempotency_key(
   key : String,
 ) -> Bool {
   self.idempotency_keys.contains(key)
+}
+
+///|
+/// List messages scoped to a group.
+pub fn MessageRepository::list_by_group(
+  self : MessageRepository,
+  group_id : String,
+) -> Array[@shared.Message] {
+  self.messages.values().filter(fn(m) { m.group_id == group_id }).collect()
+}
+
+///|
+/// List public messages scoped to a group.
+pub fn MessageRepository::list_public_by_group(
+  self : MessageRepository,
+  group_id : String,
+) -> Array[@shared.Message] {
+  self.messages
+  .values()
+  .filter(fn(m) { m.group_id == group_id && m.visibility == @shared.Public })
+  .collect()
+}
+
+///|
+/// List internal messages scoped to a group.
+pub fn MessageRepository::list_internal_by_group(
+  self : MessageRepository,
+  group_id : String,
+) -> Array[@shared.Message] {
+  self.messages
+  .values()
+  .filter(fn(m) { m.group_id == group_id && m.visibility == @shared.Internal })
+  .collect()
+}
+
+///|
+/// In-memory Group repository.
+pub(all) struct GroupRepository {
+  groups : Map[String, @shared.Group]
+}
+
+///|
+pub fn GroupRepository::new() -> GroupRepository {
+  { groups: {} }
+}
+
+///|
+pub fn GroupRepository::create(
+  self : GroupRepository,
+  group : @shared.Group,
+) -> Result[Unit, RepositoryError] {
+  if self.groups.contains(group.group_id) {
+    return Err(DuplicateKey("Group with ID \{group.group_id} already exists"))
+  }
+  self.groups.set(group.group_id, group)
+  Ok(())
+}
+
+///|
+pub fn GroupRepository::upsert(
+  self : GroupRepository,
+  group : @shared.Group,
+) -> Unit {
+  self.groups.set(group.group_id, group)
+}
+
+///|
+pub fn GroupRepository::get(
+  self : GroupRepository,
+  group_id : String,
+) -> Result[@shared.Group, RepositoryError] {
+  match self.groups.get(group_id) {
+    Some(group) => Ok(group)
+    None => Err(NotFound("Group \{group_id} not found"))
+  }
+}
+
+///|
+pub fn GroupRepository::list(self : GroupRepository) -> Array[@shared.Group] {
+  self.groups.values().collect()
+}
+
+///|
+fn group_member_key(group_id : String, user_id : String) -> String {
+  group_id + ":" + user_id
+}
+
+///|
+/// In-memory GroupMember repository.
+pub(all) struct GroupMemberRepository {
+  members : Map[String, @shared.GroupMember]
+}
+
+///|
+pub fn GroupMemberRepository::new() -> GroupMemberRepository {
+  { members: {} }
+}
+
+///|
+pub fn GroupMemberRepository::upsert(
+  self : GroupMemberRepository,
+  group_member : @shared.GroupMember,
+) -> Unit {
+  self.members.set(
+    group_member_key(group_member.group_id, group_member.user_id),
+    group_member,
+  )
+}
+
+///|
+pub fn GroupMemberRepository::get(
+  self : GroupMemberRepository,
+  group_id : String,
+  user_id : String,
+) -> @shared.GroupMember? {
+  self.members.get(group_member_key(group_id, user_id))
+}
+
+///|
+pub fn GroupMemberRepository::list_by_group(
+  self : GroupMemberRepository,
+  group_id : String,
+) -> Array[@shared.GroupMember] {
+  self.members.values().filter(fn(m) { m.group_id == group_id }).collect()
+}
+
+///|
+pub fn GroupMemberRepository::list_by_user(
+  self : GroupMemberRepository,
+  user_id : String,
+) -> Array[@shared.GroupMember] {
+  self.members.values().filter(fn(m) { m.user_id == user_id }).collect()
+}
+
+///|
+pub fn GroupMemberRepository::is_group_member(
+  self : GroupMemberRepository,
+  group_id : String,
+  user_id : String,
+) -> Bool {
+  match self.get(group_id, user_id) {
+    Some(group_member) => group_member.active
+    None => false
+  }
+}
+
+///|
+pub fn GroupMemberRepository::can_post(
+  self : GroupMemberRepository,
+  group_id : String,
+  user_id : String,
+) -> Bool {
+  match self.get(group_id, user_id) {
+    Some(group_member) => group_member.can_post()
+    None => false
+  }
+}
+
+///|
+fn route_binding_key(
+  platform : String,
+  bot_account_id : String,
+  channel_id : String,
+) -> String {
+  platform + ":" + bot_account_id + ":" + channel_id
+}
+
+///|
+/// Route binding repository (platform + bot + channel -> group).
+pub(all) struct RouteBindingRepository {
+  bindings : Map[String, @shared.RouteBinding]
+}
+
+///|
+pub fn RouteBindingRepository::new() -> RouteBindingRepository {
+  { bindings: {} }
+}
+
+///|
+pub fn RouteBindingRepository::upsert(
+  self : RouteBindingRepository,
+  binding : @shared.RouteBinding,
+) -> Unit {
+  self.bindings.set(
+    route_binding_key(
+      binding.platform,
+      binding.bot_account_id,
+      binding.channel_id,
+    ),
+    binding,
+  )
+}
+
+///|
+pub fn RouteBindingRepository::resolve(
+  self : RouteBindingRepository,
+  platform : String,
+  bot_account_id : String,
+  channel_id : String,
+) -> @shared.RouteBinding? {
+  self.bindings.get(route_binding_key(platform, bot_account_id, channel_id))
+}
+
+///|
+pub fn RouteBindingRepository::list(
+  self : RouteBindingRepository,
+) -> Array[@shared.RouteBinding] {
+  self.bindings.values().collect()
+}
+
+///|
+pub fn RouteBindingRepository::list_by_group(
+  self : RouteBindingRepository,
+  group_id : String,
+) -> Array[@shared.RouteBinding] {
+  self.bindings.values().filter(fn(b) { b.group_id == group_id }).collect()
+}
+
+///|
+pub fn RouteBindingRepository::delete(
+  self : RouteBindingRepository,
+  platform : String,
+  bot_account_id : String,
+  channel_id : String,
+) -> Unit {
+  self.bindings.remove(route_binding_key(platform, bot_account_id, channel_id))
 }

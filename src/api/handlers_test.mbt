@@ -2,15 +2,26 @@
 fn make_context() -> AppContext {
   let ticket_repo = @core.TicketRepository::new()
   let message_repo = @core.MessageRepository::new()
+  let group_member_repo = @core.GroupMemberRepository::new()
+  group_member_repo.upsert(
+    @shared.GroupMember::new("grp-default", "admin_001", roles=[@shared.Owner]),
+  )
+  group_member_repo.upsert(
+    @shared.GroupMember::new("grp-alpha", "admin_001", roles=[@shared.Owner]),
+  )
   let now = fn() { "2025-01-09T12:00:00Z" }
   let gen = fn() { "msg_001" }
-  AppContext::new(ticket_repo, message_repo, now, gen)
+  AppContext::new(ticket_repo, message_repo, now, gen, group_member_repo~)
 }
 
 ///|
-fn seed_ticket(ctx : AppContext, ticket_id : String) -> Unit {
+fn seed_ticket(
+  ctx : AppContext,
+  ticket_id : String,
+  group_id? : String = "grp-default",
+) -> Unit {
   let chat_a = @shared.ChatAMetadata::new("direct4b", "dm_001", "ts_001")
-  let ticket = @shared.Ticket::new(ticket_id, "Test Ticket", chat_a)
+  let ticket = @shared.Ticket::new(ticket_id, "Test Ticket", chat_a, group_id~)
   let _ = ctx.ticket_repo.create(ticket)
 }
 
@@ -75,4 +86,43 @@ test "draft publish flow via handlers" {
   assert_eq(published.visibility, @shared.Visibility::Public)
   assert_eq(published.draft_status, @shared.DraftStatus::Published)
   assert_eq(published.published_at, "2025-01-09T12:00:00Z")
+}
+
+///|
+test "group handlers list tickets and post note" {
+  let ctx = make_context()
+  seed_ticket(ctx, "tkt_alpha_001", group_id="grp-alpha")
+  let list_req = RequestContext::new(
+    HttpMethod::Get,
+    "/api/groups/grp-alpha/tickets",
+    "",
+    "admin_001",
+  )
+  let list_res = handle_request(ctx, list_req)
+  assert_eq(list_res.status_code, 200)
+  assert_true(list_res.body.contains("\"group_id\":\"grp-alpha\""))
+
+  let note_req = RequestContext::new(
+    HttpMethod::Post,
+    "/api/groups/grp-alpha/notes",
+    "{\"text\":\"internal group note\"}",
+    "admin_001",
+  )
+  let note_res = handle_request(ctx, note_req)
+  assert_eq(note_res.status_code, 201)
+  assert_true(note_res.body.contains("\"group_id\":\"grp-alpha\""))
+}
+
+///|
+test "group handlers reject non-member user" {
+  let ctx = make_context()
+  seed_ticket(ctx, "tkt_alpha_002", group_id="grp-alpha")
+  let req = RequestContext::new(
+    HttpMethod::Get,
+    "/api/groups/grp-alpha/tickets",
+    "",
+    "someone_else",
+  )
+  let res = handle_request(ctx, req)
+  assert_eq(res.status_code, 403)
 }
