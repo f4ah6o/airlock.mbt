@@ -15,6 +15,7 @@ rustfs_bucket := "airlock-attachments"
 awslim_s3_bin := "../awslim/awslim-s3"
 airlock_upload_cmd := "./src/cmd/it_support_app/scripts/upload_to_s3_compatible.sh"
 direct_api_env_file := "../direct-api.mbt/.env"
+direct_bot_env_file := "../direct_sdk.mbt/.env"
 
 default: help
 
@@ -24,8 +25,9 @@ help:
       "Airlock just tasks" \
       "" \
       "Main flow:" \
+      "  just app-stable         # refresh rest/bot tokens + run app (recommended)" \
       "  just app                # s3 prepare + env check + run app" \
-      "  opz daab-dev -- just app  # recommended (bot env from opz)" \
+      "  opz daab-dev -- just app  # legacy: run app with bot env from opz" \
       "  just app-up             # same as app" \
       "  just app-prepare        # s3 prepare + env check" \
       "  just app-run            # run it_support_app (native, upload hook on)" \
@@ -35,7 +37,9 @@ help:
       "  just direct-login-rest" \
       "  just direct-refresh-rest" \
       "  just direct-verify-rest" \
+      "  just direct-prepare-bot" \
       "  just direct-prepare-rest" \
+      "  just direct-prepare-all" \
       "  just direct-rest-token-print" \
       "  just direct-env-check" \
       "" \
@@ -127,6 +131,22 @@ direct-verify-rest:
 
 direct-prepare-rest: direct-refresh-rest direct-verify-rest
 
+direct-prepare-bot:
+    @just --justfile {{justfile()}} direct-login-bot; \
+    env_file="{{direct_bot_env_file}}"; \
+    if [[ ! -f "$env_file" ]]; then \
+      echo "missing $env_file. run: just direct-login-bot"; \
+      exit 2; \
+    fi; \
+    token="$(sed -n "s/^HUBOT_DIRECT_TOKEN=//p" "$env_file" | tail -n 1)"; \
+    if [[ -z "$token" ]]; then \
+      echo "HUBOT_DIRECT_TOKEN is empty. run: just direct-login-bot"; \
+      exit 2; \
+    fi; \
+    echo "direct bot token verification: ok"
+
+direct-prepare-all: direct-prepare-rest direct-prepare-bot
+
 # Print token for AIRLOCK user-name lookup (DIRECT4B_DIRECT_API_TOKEN)
 direct-rest-token-print:
     @env_file="{{direct_api_env_file}}"; \
@@ -149,14 +169,18 @@ direct-rest-token-export:
 # Validate direct-related env vars needed by app
 direct-env-check:
     @missing=0; \
-    if [[ -z "${DIRECT4B_API_TOKEN:-}" ]]; then \
-      echo "missing env: DIRECT4B_API_TOKEN (bot token)."; \
-      echo "hint: export DIRECT4B_API_TOKEN='<bot-token>'"; \
+    bot_token="${DIRECT4B_API_TOKEN:-${HUBOT_DIRECT_TOKEN:-}}"; \
+    if [[ -z "$bot_token" && -f "{{direct_bot_env_file}}" ]]; then \
+      bot_token="$(sed -n "s/^HUBOT_DIRECT_TOKEN=//p" "{{direct_bot_env_file}}" | tail -n 1)"; \
+    fi; \
+    if [[ -z "$bot_token" ]]; then \
+      echo "missing token: DIRECT4B_API_TOKEN / HUBOT_DIRECT_TOKEN (or {{direct_bot_env_file}})."; \
+      echo "hint: just direct-prepare-bot"; \
       missing=1; \
     fi; \
     if [[ -z "${DIRECT4B_BOT_USER_ID:-}" ]]; then \
       echo "missing env: DIRECT4B_BOT_USER_ID."; \
-      echo "hint: export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>'"; \
+      echo "hint: opz daab-dev -- just app   (or export DIRECT4B_BOT_USER_ID='<bot-user-id-or-email>')"; \
       missing=1; \
     fi; \
     rest_token="${DIRECT4B_DIRECT_API_TOKEN:-}"; \
@@ -262,6 +286,14 @@ app-run:
 app: app-up
 
 app-up: app-prepare app-run
+
+app-stable:
+    @just --justfile {{justfile()}} direct-prepare-all; \
+    if command -v opz >/dev/null 2>&1; then \
+      opz daab-dev -- just --justfile {{justfile()}} app-up; \
+    else \
+      just --justfile {{justfile()}} app-up; \
+    fi
 
 app-debug-auth:
     @bot_token="${DIRECT4B_API_TOKEN:-}"; \
