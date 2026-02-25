@@ -53,6 +53,16 @@ pub fn DirectAdapter::state(self : DirectAdapter) -> AdapterState {
 }
 
 ///|
+pub fn DirectAdapter::is_connected(self : DirectAdapter) -> Bool {
+  @rpc_client.is_connected(self.client)
+}
+
+///|
+pub fn DirectAdapter::is_authenticated(self : DirectAdapter) -> Bool {
+  @rpc_client.is_authenticated(self.client)
+}
+
+///|
 fn is_blank_text(s : String) -> Bool {
   for c in s {
     if c != ' ' && c != '\n' && c != '\r' && c != '\t' {
@@ -312,7 +322,8 @@ fn received_message_from_notify_payload(
   }
   let text = match content {
     @direct_types.JsonString(s) => s
-    @direct_types.JsonObject(content_obj) => json_get_string(content_obj, "text")
+    @direct_types.JsonObject(content_obj) =>
+      json_get_string(content_obj, "text")
     _ => ""
   }
   let msg_type = match json_get_int(obj, "type") {
@@ -570,6 +581,7 @@ pub fn direct_message_to_normalized(
   {
     external_id: message.id,
     platform: config.platform_name,
+    bot_account_id: config.bot_user_id,
     channel_id,
     sender_id: message.user_id,
     sender_name,
@@ -640,7 +652,8 @@ pub fn DirectAdapter::listen_incoming(
     if should_ignore_message(adapter.config, normalized) {
       return true
     }
-    if adapter.self_user_id != "" && normalized.sender_id == adapter.self_user_id {
+    if adapter.self_user_id != "" &&
+      normalized.sender_id == adapter.self_user_id {
       return true
     }
     if adapter.config.bot_user_id != "" &&
@@ -653,13 +666,21 @@ pub fn DirectAdapter::listen_incoming(
     println("direct session created")
   })
   @rpc_client.on(self.client, @direct_constants.EVENT_SESSION_ERROR, fn(data) {
-    println("direct session error: " + clip_text(data.to_string()))
+    let detail = clip_text(data.to_string())
+    self.state = AdapterState::Error("session error: " + detail)
+    println("direct session error: " + detail)
   })
-  @rpc_client.on(self.client, @direct_constants.EVENT_NOTIFICATION_ERROR, fn(data) {
-    println("direct notification error: " + clip_text(data.to_string()))
+  @rpc_client.on(self.client, @direct_constants.EVENT_NOTIFICATION_ERROR, fn(
+    data,
+  ) {
+    let detail = clip_text(data.to_string())
+    self.state = AdapterState::Error("notification error: " + detail)
+    println("direct notification error: " + detail)
   })
   @rpc_client.on(self.client, @direct_constants.EVENT_DECODE_ERROR, fn(data) {
-    println("direct decode error: " + clip_text(data.to_string()))
+    let detail = clip_text(data.to_string())
+    self.state = AdapterState::Error("decode error: " + detail)
+    println("direct decode error: " + detail)
   })
   @rpc_client.on_message(self.client, fn(message) {
     let normalized = direct_message_to_normalized(self.config, message)
@@ -724,7 +745,9 @@ pub async fn DirectAdapter::connect(
             Ok(me) => {
               self.self_user_id = @direct_types.id_to_string(me.id)
               if self.self_user_id != "" {
-                println("direct connect: resolved self_user_id=" + self.self_user_id)
+                println(
+                  "direct connect: resolved self_user_id=" + self.self_user_id,
+                )
               }
             }
             Err(err) =>
@@ -740,7 +763,7 @@ pub async fn DirectAdapter::connect(
       }
       self.state = AdapterState::Error("session not authenticated")
       println(
-        "direct connect: auth timeout connected=\{ @rpc_client.is_connected(self.client).to_string() } authenticated=\{ @rpc_client.is_authenticated(self.client).to_string() }",
+        "direct connect: auth timeout connected=\{@rpc_client.is_connected(self.client).to_string()} authenticated=\{@rpc_client.is_authenticated(self.client).to_string()}",
       )
       Err(
         AuthenticationError(
@@ -831,6 +854,7 @@ pub async fn DirectAdapter::fetch_known_user_names(
   }
 }
 
+///|
 pub async fn DirectAdapter::create_download_auth(
   self : DirectAdapter,
   file_id : String,
@@ -838,9 +862,7 @@ pub async fn DirectAdapter::create_download_auth(
   message_id? : String = "",
 ) -> Result[DownloadAuth, AdapterError] {
   if file_id == "" || talk_id == "" || message_id == "" {
-    return Err(
-      UnknownError("talk_id, message_id, file_id are required"),
-    )
+    return Err(UnknownError("talk_id, message_id, file_id are required"))
   }
   let result = @direct_files.create_download_auth(
     self.client,
@@ -866,11 +888,12 @@ pub async fn DirectAdapter::create_download_auth(
             ],
           ]
           for p in params {
-            match @rpc_client.call(
-              self.client,
-              @direct_constants.METHOD_CREATE_DOWNLOAD_AUTH,
-              p,
-            ) {
+            match
+              @rpc_client.call(
+                self.client,
+                @direct_constants.METHOD_CREATE_DOWNLOAD_AUTH,
+                p,
+              ) {
               Ok(value) =>
                 match parse_download_auth_value(value) {
                   Ok(auth) => return Ok(auth)

@@ -196,7 +196,8 @@ fn url_encode_component(text : String) -> String {
   let sb = StringBuilder::new(size_hint=text.length() + 16)
   for c in text {
     let code = c.to_int()
-    let is_alpha_num = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) ||
+    let is_alpha_num = (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
       (code >= 97 && code <= 122)
     let is_safe = is_alpha_num || c == '-' || c == '_' || c == '.' || c == '~'
     if is_safe {
@@ -205,8 +206,20 @@ fn url_encode_component(text : String) -> String {
       sb.write_char('%')
       let hi = (code / 16) & 0xF
       let lo = code & 0xF
-      sb.write_char(if hi < 10 { Int::unsafe_to_char(48 + hi) } else { Int::unsafe_to_char(65 + hi - 10) })
-      sb.write_char(if lo < 10 { Int::unsafe_to_char(48 + lo) } else { Int::unsafe_to_char(65 + lo - 10) })
+      sb.write_char(
+        if hi < 10 {
+          Int::unsafe_to_char(48 + hi)
+        } else {
+          Int::unsafe_to_char(65 + hi - 10)
+        },
+      )
+      sb.write_char(
+        if lo < 10 {
+          Int::unsafe_to_char(48 + lo)
+        } else {
+          Int::unsafe_to_char(65 + lo - 10)
+        },
+      )
     }
   }
   sb.to_string()
@@ -312,9 +325,127 @@ fn path_only(uri : String) -> String {
 }
 
 ///|
+fn is_reserved_root_segment(segment : String) -> Bool {
+  segment == "assets" ||
+  segment == "attachments" ||
+  segment == "events" ||
+  segment == "partials" ||
+  segment == "tickets" ||
+  segment == "auth" ||
+  segment == "api"
+}
+
+///|
+fn detect_group_id_from_path(path : String) -> String? {
+  let parts = split_path(path)
+  if parts.is_empty() {
+    return None
+  }
+  let first = parts[0]
+  if first == "" || is_reserved_root_segment(first) {
+    return None
+  }
+  Some(first)
+}
+
+///|
+fn strip_group_prefix(path : String, group_id : String) -> String {
+  let parts = split_path(path)
+  if parts.is_empty() {
+    return "/"
+  }
+  if parts[0] != group_id {
+    return path
+  }
+  if parts.length() == 1 {
+    return "/"
+  }
+  let sb = StringBuilder::new(size_hint=path.length())
+  for i in 1..<parts.length() {
+    sb.write_char('/')
+    sb.write_string(parts[i])
+  }
+  sb.to_string()
+}
+
+///|
+fn with_group_prefix(group_id : String, path : String) -> String {
+  if path == "/" {
+    "/" + group_id
+  } else {
+    "/" + group_id + path
+  }
+}
+
+///|
+fn find_substring_from(text : String, pattern : String, start : Int) -> Int {
+  if pattern == "" {
+    return start
+  }
+  if start < 0 || start >= text.length() {
+    return -1
+  }
+  if pattern.length() > text.length() {
+    return -1
+  }
+  let max_start = text.length() - pattern.length()
+  let mut i = start
+  while i <= max_start {
+    let mut matched = true
+    for j in 0..<pattern.length() {
+      if text[i + j] != pattern[j] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return i
+    }
+    i = i + 1
+  }
+  -1
+}
+
+///|
+fn replace_all(text : String, pattern : String, replacement : String) -> String {
+  if pattern == "" {
+    return text
+  }
+  let sb = StringBuilder::new(size_hint=text.length() + 64)
+  let mut cursor = 0
+  while cursor < text.length() {
+    let idx = find_substring_from(text, pattern, cursor)
+    if idx < 0 {
+      for i in cursor..<text.length() {
+        sb.write_char(text[i].unsafe_to_char())
+      }
+      break
+    }
+    for i in cursor..<idx {
+      sb.write_char(text[i].unsafe_to_char())
+    }
+    sb.write_string(replacement)
+    cursor = idx + pattern.length()
+  }
+  sb.to_string()
+}
+
+///|
+fn prefix_group_paths_in_html(html : String, group_id : String) -> String {
+  let mut out = html
+  out = replace_all(out, "/tickets/", "/" + group_id + "/tickets/")
+  out = replace_all(out, "/partials/", "/" + group_id + "/partials/")
+  out = replace_all(out, "/events", "/" + group_id + "/events")
+  out = replace_all(out, "/assets/mhx.js", "/" + group_id + "/assets/mhx.js")
+  out
+}
+
+///|
 struct AppState {
   ticket_repo : @core.TicketRepository
   message_repo : @core.MessageRepository
+  group_member_repo : @core.GroupMemberRepository
+  route_binding_repo : @core.RouteBindingRepository
   id_counter : Ref[Int]
   dev_mode : Ref[Bool]
   realtime_version : Ref[Int]
@@ -337,6 +468,7 @@ struct AppState {
   s3_region : Ref[String]
   attachment_proxy_map : Ref[Map[String, String]]
   attachment_upload_cmd : Ref[String]
+  auth_config : Ref[@auth.AuthConfig]
 }
 
 ///|
@@ -349,19 +481,33 @@ fn next_id(counter : Ref[Int], prefix : String) -> String {
 fn seed_state() -> AppState {
   let ticket_repo = @core.TicketRepository::new()
   let message_repo = @core.MessageRepository::new()
+  let group_member_repo = @core.GroupMemberRepository::new()
+  let route_binding_repo = @core.RouteBindingRepository::new()
+  let default_group_id = @shared.default_group_id()
   let id_counter : Ref[Int] = { val: 100 }
   let t1 = @shared.Ticket::new(
     "tkt-001",
     "VPN does not connect",
     @shared.ChatAMetadata::new("direct", "dm-001", ""),
+    group_id=default_group_id,
   )
   let t2 = @shared.Ticket::new(
     "tkt-002",
     "Laptop is overheating",
     @shared.ChatAMetadata::new("direct", "dm-002", ""),
+    group_id=default_group_id,
   )
   let _ = ticket_repo.create(t1)
   let _ = ticket_repo.create(t2)
+  group_member_repo.upsert(
+    @shared.GroupMember::new(default_group_id, "support", roles=[@shared.Owner]),
+  )
+  route_binding_repo.upsert(
+    @shared.RouteBinding::new("direct", "", "dm-001", default_group_id),
+  )
+  route_binding_repo.upsert(
+    @shared.RouteBinding::new("direct", "", "dm-002", default_group_id),
+  )
   let m1 = @shared.Message::new(
     next_id(id_counter, "msg"),
     "tkt-001",
@@ -369,6 +515,7 @@ fn seed_state() -> AppState {
     @shared.Public,
     @shared.ChatA,
     "employee-a",
+    group_id=default_group_id,
   )
   let m2 = @shared.Message::new(
     next_id(id_counter, "msg"),
@@ -377,12 +524,15 @@ fn seed_state() -> AppState {
     @shared.Public,
     @shared.Console,
     "support",
+    group_id=default_group_id,
   )
   let _ = message_repo.create(m1)
   let _ = message_repo.create(m2)
   {
     ticket_repo,
     message_repo,
+    group_member_repo,
+    route_binding_repo,
     id_counter,
     dev_mode: { val: false },
     realtime_version: { val: 0 },
@@ -405,12 +555,32 @@ fn seed_state() -> AppState {
     s3_region: { val: "us-east-1" },
     attachment_proxy_map: { val: {} },
     attachment_upload_cmd: { val: "" },
+    auth_config: { val: @auth.AuthConfig::default() },
   }
 }
 
 ///|
 fn should_send_to_direct(platform : String) -> Bool {
   platform == "direct4b" || platform == "direct"
+}
+
+///|
+fn upsert_group_route_binding_for_ticket(
+  state : AppState,
+  ticket : @shared.Ticket,
+  bot_account_id : String,
+) -> Unit {
+  if ticket.chat_a.platform == "" || ticket.chat_a.dm_id == "" {
+    return
+  }
+  state.route_binding_repo.upsert(
+    @shared.RouteBinding::new(
+      ticket.chat_a.platform,
+      bot_account_id,
+      ticket.chat_a.dm_id,
+      ticket.group_id,
+    ),
+  )
 }
 
 ///|
@@ -453,10 +623,7 @@ fn consume_outbound_echo(
 }
 
 ///|
-fn mark_seen_direct_external_id(
-  state : AppState,
-  external_id : String,
-) -> Bool {
+fn mark_seen_direct_external_id(state : AppState, external_id : String) -> Bool {
   if external_id == "" {
     return false
   }
@@ -553,6 +720,81 @@ async fn process_outbound_queue_loop(state : AppState) -> Unit {
 }
 
 ///|
+fn reconnect_backoff_ms(retry_seq : Int) -> Int {
+  let mut sleep_ms = 2000
+  let extra_retries = if retry_seq <= 1 { 0 } else { retry_seq - 1 }
+  for _ in 0..<extra_retries {
+    if sleep_ms >= 60000 {
+      return 60000
+    }
+    sleep_ms = sleep_ms * 2
+  }
+  if sleep_ms > 60000 {
+    60000
+  } else {
+    sleep_ms
+  }
+}
+
+///|
+async fn refresh_bot_token_before_reconnect(state : AppState) -> Bool {
+  let bot_user_id = env_value("DIRECT4B_BOT_USER_ID")
+  let user_password = env_value("DIRECT4B_USER_PASSWORD")
+  if bot_user_id == "" || user_password == "" {
+    println(
+      "direct-relogin: skipped (missing DIRECT4B_BOT_USER_ID or DIRECT4B_USER_PASSWORD)",
+    )
+    return false
+  }
+  let envs : Map[String, String] = {}
+  envs.set("DIRECT4B_BOT_USER_ID", bot_user_id)
+  envs.set("DIRECT4B_USER_PASSWORD", user_password)
+  let endpoint = env_value("DIRECT4B_ENDPOINT")
+  if endpoint != "" {
+    envs.set("HUBOT_DIRECT_ENDPOINT", endpoint)
+  }
+  let proxy_url = env_value("DIRECT4B_PROXY_URL")
+  if proxy_url != "" {
+    envs.set("HUBOT_DIRECT_PROXY_URL", proxy_url)
+  }
+  println("direct-relogin: running daab login --force")
+  let (exit_code, stdout) = @process.collect_stdout(
+    "moon",
+    [
+      "-C", "../direct_sdk.mbt", "run", "src/daab", "--target", "native", "--", "login",
+      "--force",
+    ],
+    extra_env=envs,
+  )
+  let output_text_result = try? stdout.text()
+  let output_text = match output_text_result {
+    Ok(v) => clip_for_error(v.trim().to_string())
+    Err(_) => ""
+  }
+  if exit_code != 0 {
+    println(
+      "direct-relogin: failed exit=\{exit_code.to_string()} detail=\{output_text}",
+    )
+    return false
+  }
+  let refreshed = read_env_file_value(
+    direct_sdk_env_file_path(),
+    "HUBOT_DIRECT_TOKEN",
+  )
+  if refreshed == "" {
+    println(
+      "direct-relogin: login succeeded but HUBOT_DIRECT_TOKEN was not found",
+    )
+    return false
+  }
+  state.direct_bridge_token.val = refreshed
+  println(
+    "direct-relogin: token refreshed (len=\{state.direct_bridge_token.val.length().to_string()})",
+  )
+  true
+}
+
+///|
 async fn maintain_direct_bridge_loop(
   state : AppState,
   ingest_ctx : @core.IngestContext,
@@ -560,14 +802,49 @@ async fn maintain_direct_bridge_loop(
 ) -> Unit {
   let mut retry_seq = 0
   while true {
+    let mut sleep_ms = 2000
+    match state.direct_adapter.val {
+      Some(adapter) => {
+        let adapter_state = adapter.state()
+        let connected = adapter.is_connected()
+        let authenticated = adapter.is_authenticated()
+        let has_state_error = match adapter_state {
+          @adapters.Error(_) => true
+          _ => false
+        }
+        if has_state_error || !connected || !authenticated {
+          println(
+            "direct-health: unhealthy state=\{adapter_state.to_string()} connected=\{connected.to_string()} authenticated=\{authenticated.to_string()}",
+          )
+          ignore(adapter.disconnect())
+          state.direct_adapter.val = None
+          state.direct_user_names_loaded.val = false
+        } else {
+          retry_seq = 0
+        }
+      }
+      None => ()
+    }
     if state.direct_adapter.val is None && !state.direct_bridge_connecting.val {
       retry_seq = retry_seq + 1
-      println("direct bridge retry: seq=\{retry_seq.to_string()}")
+      println("direct-reconnect: retry seq=\{retry_seq.to_string()}")
+      let relogin_ok = refresh_bot_token_before_reconnect(state)
+      if !relogin_ok {
+        println("direct-relogin: proceeding with currently available token")
+      }
       state.direct_bridge_connecting.val = true
-      try_start_direct_bridge(state, ingest_ctx, tasks)
+      let connected = try_start_direct_bridge(state, ingest_ctx, tasks)
       state.direct_bridge_connecting.val = false
+      if connected {
+        retry_seq = 0
+      } else {
+        sleep_ms = reconnect_backoff_ms(retry_seq)
+        println(
+          "direct-reconnect: failed seq=\{retry_seq.to_string()} next_retry_ms=\{sleep_ms.to_string()}",
+        )
+      }
     }
-    @async.sleep(2000)
+    @async.sleep(sleep_ms)
   }
 }
 
@@ -605,7 +882,11 @@ fn single_line_preview(text : String) -> String {
 }
 
 ///|
-async fn handle_sse_subscribe(state : AppState, conn : @socket.Tcp) -> Unit {
+async fn handle_sse_subscribe(
+  state : AppState,
+  conn : @socket.Tcp,
+  group_id? : String = "",
+) -> Unit {
   let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
   conn.write(array_to_bytes(string_to_bytes(header)))
   send_sse_event(conn, "connected", "{}")
@@ -615,9 +896,20 @@ async fn handle_sse_subscribe(state : AppState, conn : @socket.Tcp) -> Unit {
     if current_version != seen_version {
       seen_version = current_version
       let ticket_id = state.realtime_last_ticket_id.val
-      let ticket_subject = match state.ticket_repo.get(ticket_id) {
-        Ok(t) => t.subject
-        Err(_) => ""
+      let ticket = match state.ticket_repo.get(ticket_id) {
+        Ok(t) => Some(t)
+        Err(_) => None
+      }
+      let ticket_subject = match ticket {
+        Some(t) => t.subject
+        None => ""
+      }
+      let ticket_group = match ticket {
+        Some(t) => t.group_id
+        None => ""
+      }
+      if group_id != "" && ticket_group != group_id {
+        continue
       }
       let timeline = state.message_repo.list_public_by_ticket(ticket_id)
       let preview_message = if timeline.is_empty() {
@@ -664,10 +956,10 @@ fn binary_response(
   content_disposition? : String = "",
 ) -> @http.Response {
   let resp = @http.Response::new(status, reason)
-  .header("Content-Type", content_type)
-  .header("X-Content-Type-Options", "nosniff")
-  .header("Content-Length", body.length().to_string())
-  .header("Connection", "close")
+    .header("Content-Type", content_type)
+    .header("X-Content-Type-Options", "nosniff")
+    .header("Content-Length", body.length().to_string())
+    .header("Connection", "close")
   if content_disposition != "" {
     resp.header("Content-Disposition", content_disposition).body(body)
   } else {
@@ -713,6 +1005,17 @@ fn js_response(body : String) -> @http.Response {
 fn redirect_to_ticket(ticket_id : String) -> @http.Response {
   @http.Response::new(303, "See Other")
   .header("Location", "/tickets/" + ticket_id)
+  .header("Content-Length", "0")
+  .header("Connection", "close")
+}
+
+///|
+fn redirect_to_group_ticket(
+  group_id : String,
+  ticket_id : String,
+) -> @http.Response {
+  @http.Response::new(303, "See Other")
+  .header("Location", "/" + group_id + "/tickets/" + ticket_id)
   .header("Content-Length", "0")
   .header("Connection", "close")
 }
@@ -876,6 +1179,149 @@ fn full_page_response(
 }
 
 ///|
+fn ticket_view_list_by_group(
+  state : AppState,
+  group_id : String,
+) -> Array[@shared.Ticket] {
+  let buckets : Array[Array[@shared.Ticket]] = [[], [], []]
+  for raw_ticket in state.ticket_repo.list_by_group(group_id) {
+    let ticket = ticket_for_view(state, raw_ticket)
+    buckets[ticket_bucket(ticket.status)].push(ticket)
+  }
+  let merged : Array[@shared.Ticket] = []
+  for bucket in buckets {
+    for ticket in bucket {
+      merged.push(ticket)
+    }
+  }
+  merged
+}
+
+///|
+fn ticket_for_group(
+  state : AppState,
+  group_id : String,
+  ticket_id : String,
+) -> @shared.Ticket? {
+  match state.ticket_repo.get(ticket_id) {
+    Ok(t) =>
+      if t.group_id == group_id {
+        Some(ticket_for_view(state, t))
+      } else {
+        None
+      }
+    Err(_) => None
+  }
+}
+
+///|
+fn full_page_response_for_group(
+  state : AppState,
+  group_id : String,
+  preferred_ticket_id : String?,
+) -> @http.Response {
+  let tickets = ticket_view_list_by_group(state, group_id)
+  let selected = match preferred_ticket_id {
+    Some(ticket_id) =>
+      match ticket_for_group(state, group_id, ticket_id) {
+        Some(t) => Some(t)
+        None => if tickets.is_empty() { None } else { Some(tickets[0]) }
+      }
+    None => if tickets.is_empty() { None } else { Some(tickets[0]) }
+  }
+  match selected {
+    Some(t) => {
+      let _ = fill_sender_names_from_cache(state, t.ticket_id)
+    }
+    None => ()
+  }
+  let timeline = match selected {
+    None => []
+    Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
+  }
+  let notes = match selected {
+    None => []
+    Some(t) =>
+      state.message_repo
+      .list_workspace_by_ticket(t.ticket_id)
+      .filter(fn(m) { m.visibility == @shared.Internal })
+  }
+  let html = @web.render_index(tickets, selected, timeline, notes)
+  html_response(prefix_group_paths_in_html(html, group_id))
+}
+
+///|
+fn ticket_partial_response_for_group(
+  state : AppState,
+  group_id : String,
+  ticket_id : String,
+) -> @http.Response {
+  let tickets = ticket_view_list_by_group(state, group_id)
+  let ticket = ticket_for_group(state, group_id, ticket_id)
+  let timeline = match ticket {
+    None => []
+    Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
+  }
+  let notes = match ticket {
+    None => []
+    Some(t) =>
+      state.message_repo
+      .list_workspace_by_ticket(t.ticket_id)
+      .filter(fn(m) { m.visibility == @shared.Internal })
+  }
+  let html = @web.render_ticket_partial(tickets, ticket, timeline, notes)
+  html_response(prefix_group_paths_in_html(html, group_id))
+}
+
+///|
+fn left_partial_response_for_group(
+  state : AppState,
+  group_id : String,
+  selected_id : String?,
+) -> @http.Response {
+  let html = @web.render_left_partial(
+    ticket_view_list_by_group(state, group_id),
+    selected_id,
+  )
+  html_response(prefix_group_paths_in_html(html, group_id))
+}
+
+///|
+fn center_partial_response_for_group(
+  state : AppState,
+  group_id : String,
+  ticket_id : String,
+  error : String?,
+) -> @http.Response {
+  let ticket = ticket_for_group(state, group_id, ticket_id)
+  let timeline = match ticket {
+    None => []
+    Some(t) => state.message_repo.list_public_by_ticket(t.ticket_id)
+  }
+  let html = @web.render_center_partial(ticket, timeline, error)
+  html_response(prefix_group_paths_in_html(html, group_id))
+}
+
+///|
+fn right_partial_response_for_group(
+  state : AppState,
+  group_id : String,
+  ticket_id : String,
+  error : String?,
+) -> @http.Response {
+  let ticket = ticket_for_group(state, group_id, ticket_id)
+  let notes = match ticket {
+    None => []
+    Some(t) =>
+      state.message_repo
+      .list_workspace_by_ticket(t.ticket_id)
+      .filter(fn(m) { m.visibility == @shared.Internal })
+  }
+  let html = @web.render_right_partial(ticket, notes, error)
+  html_response(prefix_group_paths_in_html(html, group_id))
+}
+
+///|
 async fn try_load_direct_user_names_once(state : AppState) -> Unit {
   if state.direct_user_names_loaded.val {
     return
@@ -901,9 +1347,7 @@ async fn try_load_direct_user_names_once(state : AppState) -> Unit {
     let talks_result = try? @direct_api_talks.get_talks(token)
     match talks_result {
       Ok(talks) => {
-        println(
-          "direct-api talks fetched: count=\{talks.length().to_string()}",
-        )
+        println("direct-api talks fetched: count=\{talks.length().to_string()}")
         for talk in talks {
           println(
             "direct-api talk: id=\{talk.talk_id_str} users=\{talk.users.length().to_string()}",
@@ -957,10 +1401,7 @@ fn fill_sender_names_from_cache(state : AppState, ticket_id : String) -> Int {
 }
 
 ///|
-fn ensure_ticket_open_context(
-  state : AppState,
-  ticket_id : String,
-) -> Unit {
+fn ensure_ticket_open_context(state : AppState, ticket_id : String) -> Unit {
   let _ = fill_sender_names_from_cache(state, ticket_id)
 }
 
@@ -1013,6 +1454,104 @@ fn is_mhx_request(request : @http.Request) -> Bool {
     }
   }
   false
+}
+
+///|
+fn redirect_response(location : String) -> @http.Response {
+  @http.Response::new(303, "See Other")
+  .header("Location", location)
+  .header("Content-Length", "0")
+  .header("Connection", "close")
+}
+
+///|
+fn keycloak_login_or_unauthorized(
+  state : AppState,
+  group_id : String,
+  message : String,
+) -> @http.Response {
+  let return_to = with_group_prefix(group_id, "/")
+  let login_url = @auth.build_keycloak_login_url(
+    state.auth_config.val,
+    return_to,
+  )
+  if login_url != "" {
+    return redirect_response(login_url)
+  }
+  build_response(401, "Unauthorized", message, "text/plain; charset=utf-8")
+}
+
+///|
+fn dev_principal(group_id : String) -> @auth.Principal {
+  let roles : Map[String, Array[@shared.GroupRole]] = {}
+  roles.set(group_id, [@shared.Owner])
+  {
+    identity: @shared.Identity::new(
+      "support", "support@example.local", "Support", "dev-support",
+    ),
+    group_ids: [group_id],
+    group_roles: roles,
+    raw_token: "dev",
+  }
+}
+
+///|
+fn sync_principal_memberships(
+  state : AppState,
+  principal : @auth.Principal,
+) -> Unit {
+  for group_id in principal.group_ids {
+    let roles = match principal.group_roles.get(group_id) {
+      Some(v) => v
+      None => [@shared.Viewer]
+    }
+    state.group_member_repo.upsert(
+      @shared.GroupMember::new(group_id, principal.identity.user_id, roles~),
+    )
+  }
+}
+
+///|
+fn require_group_access(
+  state : AppState,
+  request : @http.Request,
+  group_id : String,
+  write? : Bool = false,
+) -> Result[@auth.Principal, @http.Response] {
+  let principal = match
+    @auth.principal_from_headers(state.auth_config.val, request.headers) {
+    Ok(v) => v
+    Err(_) =>
+      if state.dev_mode.val {
+        dev_principal(group_id)
+      } else {
+        return Err(
+          keycloak_login_or_unauthorized(
+            state, group_id, "authentication required",
+          ),
+        )
+      }
+  }
+  sync_principal_memberships(state, principal)
+  if !state.group_member_repo.is_group_member(
+      group_id,
+      principal.identity.user_id,
+    ) {
+    return Err(
+      build_response(
+        403, "Forbidden", "group access denied", "text/plain; charset=utf-8",
+      ),
+    )
+  }
+  if write &&
+    !state.group_member_repo.can_post(group_id, principal.identity.user_id) {
+    return Err(
+      build_response(
+        403, "Forbidden", "group write access denied", "text/plain; charset=utf-8",
+      ),
+    )
+  }
+  Ok(principal)
 }
 
 ///|
@@ -1093,6 +1632,7 @@ fn is_allowed_proxy_url(state : AppState, url : String) -> Bool {
   false
 }
 
+///|
 fn substring(text : String, start : Int, end_ : Int) -> String {
   let sb = StringBuilder::new(size_hint=end_ - start)
   for i in start..<end_ {
@@ -1204,19 +1744,18 @@ async fn fetch_direct_attachment_bytes(
   let token = state.direct_bridge_token.val
   if token != "" {
     let url_with_auth = if (
-        (has_prefix(url, "https://api.direct4b.com/") ||
-          has_prefix(url, "http://api.direct4b.com/")) &&
-        !contains_text(url, "Authorization=")
-      ) {
+        has_prefix(url, "https://api.direct4b.com/") ||
+        has_prefix(url, "http://api.direct4b.com/")
+      ) &&
+      !contains_text(url, "Authorization=") {
       let separator = if contains_text(url, "?") { "&" } else { "?" }
       url + separator + "Authorization=ALB%20" + token
     } else {
       url
     }
-    let (exit_code, out, err) = @process.collect_output(
-      "curl",
-      ["-fsSL", url_with_auth],
-    )
+    let (exit_code, out, err) = @process.collect_output("curl", [
+      "-fsSL", url_with_auth,
+    ])
     if exit_code == 0 {
       return Ok(out.binary().to_array())
     }
@@ -1228,15 +1767,15 @@ async fn fetch_direct_attachment_bytes(
     println(
       "direct attachment fetch failed with ALB query auth: exit=\{exit_code.to_string()} err=\{err_text}",
     )
-    for header in [
-      "Authorization: Bearer " + token,
-      "X-Auth-Token: " + token,
-      "X-API-Token: " + token,
-    ] {
-      let (exit_code, out, err) = @process.collect_output(
-        "curl",
-        ["-fsSL", "-H", header, url],
-      )
+    for
+      header in [
+        "Authorization: Bearer " + token,
+        "X-Auth-Token: " + token,
+        "X-API-Token: " + token,
+      ] {
+      let (exit_code, out, err) = @process.collect_output("curl", [
+        "-fsSL", "-H", header, url,
+      ])
       if exit_code == 0 {
         return Ok(out.binary().to_array())
       }
@@ -1304,7 +1843,9 @@ async fn fetch_s3_object_bytes(
   envs.set("AWS_ENDPOINT_URL_S3", state.s3_endpoint_url.val)
   let (exit_code, out) = @process.collect_stdout(
     state.awslim_s3_bin.val,
-    ["s3", "get-object", input_json, "--output-stream", "-", "--api-output=false"],
+    [
+      "s3", "get-object", input_json, "--output-stream", "-", "--api-output=false",
+    ],
     extra_env=envs,
   )
   if exit_code == 0 {
@@ -1322,12 +1863,10 @@ async fn handle_attachment_proxy(
   let query = parse_query(uri)
   let target_url = match query.get("url") {
     Some(v) => v
-    None => return build_response(
-      400,
-      "Bad Request",
-      "missing url query parameter",
-      "text/plain; charset=utf-8",
-    )
+    None =>
+      return build_response(
+        400, "Bad Request", "missing url query parameter", "text/plain; charset=utf-8",
+      )
   }
   let download_name = match query.get("name") {
     Some(v) => sanitize_filename(v)
@@ -1363,21 +1902,21 @@ async fn handle_attachment_proxy(
     target_host == state.direct_attachment_host.val
   if is_direct_attachment {
     match state.attachment_proxy_map.val.get(target_url) {
-      Some(mapped_url) => {
+      Some(mapped_url) =>
         match fetch_s3_object_bytes(state, mapped_url) {
-          Ok(body) => return binary_response(
-            200,
-            "OK",
-            body,
-            content_type,
-            content_disposition=content_disposition,
-          )
+          Ok(body) =>
+            return binary_response(
+              200,
+              "OK",
+              body,
+              content_type,
+              content_disposition~,
+            )
           Err(err_msg) =>
             println(
               "mapped s3 fetch failed for direct attachment: \{clip_for_error(err_msg)}",
             )
         }
-      }
       None => ()
     }
   }
@@ -1387,20 +1926,114 @@ async fn handle_attachment_proxy(
     fetch_s3_object_bytes(state, target_url)
   }
   match fetched {
-    Ok(body) => binary_response(
-      200,
-      "OK",
-      body,
-      content_type,
-      content_disposition=content_disposition,
-    )
+    Ok(body) =>
+      binary_response(200, "OK", body, content_type, content_disposition~)
     Err(msg) => bad_gateway_response(msg)
   }
 }
 
 ///|
-async fn handle_get(state : AppState, uri : String) -> @http.Response {
+async fn handle_get(
+  state : AppState,
+  request : @http.Request,
+) -> @http.Response {
+  let uri = request.uri
   let path = path_only(uri)
+  match detect_group_id_from_path(path) {
+    Some(group_id) => {
+      match require_group_access(state, request, group_id) {
+        Err(resp) => return resp
+        Ok(_) => ()
+      }
+      let scoped_path = strip_group_prefix(path, group_id)
+      if scoped_path == "/" {
+        return full_page_response_for_group(state, group_id, None)
+      }
+      if scoped_path == "/attachments/proxy" {
+        return handle_attachment_proxy(state, uri)
+      }
+      if scoped_path == "/events" {
+        return build_response(
+          405, "Method Not Allowed", "Use EventSource GET /events without standard response handler.",
+          "text/plain; charset=utf-8",
+        )
+      }
+      if scoped_path == "/assets/mhx.js" {
+        match read_asset("src/cmd/it_support_app/public/mhx.js") {
+          Some(content) => return js_response(content)
+          None => return not_found_response()
+        }
+      }
+      let parts = split_path(scoped_path)
+      if parts.length() == 2 && parts[0] == "tickets" {
+        let ticket_id = parts[1]
+        match ticket_for_group(state, group_id, ticket_id) {
+          Some(_) => {
+            ensure_ticket_open_context(state, ticket_id)
+            return full_page_response_for_group(
+              state,
+              group_id,
+              Some(ticket_id),
+            )
+          }
+          None => return not_found_response()
+        }
+      }
+      if parts.length() == 3 && parts[0] == "partials" && parts[1] == "ticket" {
+        let ticket_id = parts[2]
+        match ticket_for_group(state, group_id, ticket_id) {
+          Some(_) => {
+            ensure_ticket_open_context(state, ticket_id)
+            return ticket_partial_response_for_group(state, group_id, ticket_id)
+          }
+          None => return not_found_response()
+        }
+      }
+      if parts.length() == 3 && parts[0] == "partials" && parts[1] == "tickets" {
+        let selected_id = if parts[2] == "-" { None } else { Some(parts[2]) }
+        return left_partial_response_for_group(state, group_id, selected_id)
+      }
+      if parts.length() == 4 &&
+        parts[0] == "partials" &&
+        parts[1] == "ticket" &&
+        parts[3] == "center" {
+        let ticket_id = parts[2]
+        match ticket_for_group(state, group_id, ticket_id) {
+          Some(_) => {
+            ensure_ticket_open_context(state, ticket_id)
+            return center_partial_response_for_group(
+              state,
+              group_id,
+              ticket_id,
+              None,
+            )
+          }
+          None => return not_found_response()
+        }
+      }
+      if parts.length() == 4 &&
+        parts[0] == "partials" &&
+        parts[1] == "ticket" &&
+        parts[3] == "right" {
+        let ticket_id = parts[2]
+        match ticket_for_group(state, group_id, ticket_id) {
+          Some(_) => {
+            ensure_ticket_open_context(state, ticket_id)
+            return right_partial_response_for_group(
+              state,
+              group_id,
+              ticket_id,
+              None,
+            )
+          }
+          None => return not_found_response()
+        }
+      }
+      return not_found_response()
+    }
+    None => ()
+  }
+
   if path == "/" {
     return full_page_response(state, None)
   }
@@ -1494,10 +2127,331 @@ async fn handle_get(state : AppState, uri : String) -> @http.Response {
 ///|
 fn handle_post(
   state : AppState,
+  request : @http.Request,
   path : String,
   body : Array[Byte],
   mhx_request : Bool,
 ) -> @http.Response {
+  match detect_group_id_from_path(path) {
+    Some(group_id) => {
+      let principal = match
+        require_group_access(state, request, group_id, write=true) {
+        Ok(v) => v
+        Err(resp) => return resp
+      }
+      let scoped_path = strip_group_prefix(path, group_id)
+      let scoped_parts = split_path(scoped_path)
+      if scoped_parts.length() == 2 &&
+        scoped_parts[0] == "tickets" &&
+        scoped_parts[1] == "close" {
+        return build_response(
+          403, "Forbidden", "Closing tickets is not supported from group-scoped routes.",
+          "text/plain; charset=utf-8",
+        )
+      }
+      if scoped_parts.length() == 5 &&
+        scoped_parts[0] == "tickets" &&
+        scoped_parts[2] == "notes" {
+        let ticket_id = scoped_parts[1]
+        let message_id = scoped_parts[3]
+        let note_action = scoped_parts[4]
+        let form = parse_form(body_to_string(body))
+        let intent = match form.get("intent") {
+          Some(v) => v
+          None => ""
+        }
+        let ticket = ticket_for_group(state, group_id, ticket_id)
+        let is_closed_ticket = match ticket {
+          Some(t) => t.status == @shared.Closed
+          None => false
+        }
+        if ticket is None {
+          return not_found_response()
+        }
+        if is_closed_ticket {
+          if mhx_request {
+            return right_partial_response_for_group(
+              state,
+              group_id,
+              ticket_id,
+              Some("Ticket is closed. New replies/notes are not allowed."),
+            )
+          }
+          return build_response(
+            409, "Conflict", "Ticket is closed. New replies/notes are not allowed.",
+            "text/plain; charset=utf-8",
+          )
+        }
+        if intent == "reply" {
+          if mhx_request {
+            return right_partial_response_for_group(
+              state,
+              group_id,
+              ticket_id,
+              Some("Invalid form intent for note."),
+            )
+          }
+          return build_response(
+            422, "Unprocessable Entity", "Invalid form intent for note.", "text/plain; charset=utf-8",
+          )
+        }
+        match state.message_repo.get(message_id) {
+          Err(_) => {
+            if mhx_request {
+              return right_partial_response_for_group(
+                state,
+                group_id,
+                ticket_id,
+                None,
+              )
+            }
+            return redirect_to_group_ticket(group_id, ticket_id)
+          }
+          Ok(note_message) => {
+            if note_message.ticket_id != ticket_id ||
+              note_message.group_id != group_id ||
+              note_message.visibility != @shared.Internal {
+              if mhx_request {
+                return right_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  None,
+                )
+              }
+              return redirect_to_group_ticket(group_id, ticket_id)
+            }
+            match note_action {
+              "edit" => {
+                let text = match form.get("note_text") {
+                  Some(v) => v
+                  None => ""
+                }
+                if is_blank_text(text) {
+                  if mhx_request {
+                    return right_partial_response_for_group(
+                      state,
+                      group_id,
+                      ticket_id,
+                      Some("Note text is required."),
+                    )
+                  }
+                  return build_response(
+                    422, "Unprocessable Entity", "Note text is required.", "text/plain; charset=utf-8",
+                  )
+                }
+                let updated = @shared.Message::{ ..note_message, text, }
+                let _ = state.message_repo.update(updated)
+                notify_ticket_updated(state, ticket_id)
+                if mhx_request {
+                  return right_partial_response_for_group(
+                    state,
+                    group_id,
+                    ticket_id,
+                    None,
+                  )
+                }
+                return redirect_to_group_ticket(group_id, ticket_id)
+              }
+              "delete" => {
+                match state.message_repo.delete(message_id) {
+                  Err(_) => ()
+                  Ok(_) => notify_ticket_updated(state, ticket_id)
+                }
+                if mhx_request {
+                  return right_partial_response_for_group(
+                    state,
+                    group_id,
+                    ticket_id,
+                    None,
+                  )
+                }
+                return redirect_to_group_ticket(group_id, ticket_id)
+              }
+              _ => return not_found_response()
+            }
+          }
+        }
+      }
+      if scoped_parts.length() == 3 && scoped_parts[0] == "tickets" {
+        let ticket_id = scoped_parts[1]
+        let action = scoped_parts[2]
+        let form = parse_form(body_to_string(body))
+        let intent = match form.get("intent") {
+          Some(v) => v
+          None => ""
+        }
+        let ticket = ticket_for_group(state, group_id, ticket_id)
+        if ticket is None {
+          return not_found_response()
+        }
+        match action {
+          "reply" => {
+            let text = match form.get("reply_text") {
+              Some(v) => v
+              None => ""
+            }
+            let is_closed_ticket = match ticket {
+              Some(t) => t.status == @shared.Closed
+              None => false
+            }
+            if is_closed_ticket {
+              if mhx_request {
+                return center_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Ticket is closed. New replies/notes are not allowed."),
+                )
+              }
+              return build_response(
+                409, "Conflict", "Ticket is closed. New replies/notes are not allowed.",
+                "text/plain; charset=utf-8",
+              )
+            }
+            if intent == "note" {
+              if mhx_request {
+                return center_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Invalid form intent for reply."),
+                )
+              }
+              return build_response(
+                422, "Unprocessable Entity", "Invalid form intent for reply.", "text/plain; charset=utf-8",
+              )
+            }
+            if is_blank_text(text) {
+              if mhx_request {
+                return center_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Reply text is required."),
+                )
+              }
+              return build_response(
+                422, "Unprocessable Entity", "Reply text is required.", "text/plain; charset=utf-8",
+              )
+            }
+            let sender_id = principal.identity.user_id
+            let sender_name = principal.identity.display_name
+            let msg = @shared.Message::new(
+              next_id(state.id_counter, "msg"),
+              ticket_id,
+              text,
+              @shared.Public,
+              @shared.Console,
+              sender_id,
+              group_id~,
+            )
+            let _ = state.message_repo.create(@shared.Message::{
+              ..msg,
+              sender_name,
+            })
+            match ticket {
+              Some(t) =>
+                enqueue_direct_outbound(
+                  state,
+                  t,
+                  text,
+                  "outbound:" + msg.message_id,
+                )
+              None => ()
+            }
+            notify_ticket_updated(state, ticket_id)
+            if mhx_request {
+              return center_partial_response_for_group(
+                state,
+                group_id,
+                ticket_id,
+                None,
+              )
+            }
+            return redirect_to_group_ticket(group_id, ticket_id)
+          }
+          "notes" => {
+            let text = match form.get("note_text") {
+              Some(v) => v
+              None => ""
+            }
+            let is_closed_ticket = match ticket {
+              Some(t) => t.status == @shared.Closed
+              None => false
+            }
+            if is_closed_ticket {
+              if mhx_request {
+                return right_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Ticket is closed. New replies/notes are not allowed."),
+                )
+              }
+              return build_response(
+                409, "Conflict", "Ticket is closed. New replies/notes are not allowed.",
+                "text/plain; charset=utf-8",
+              )
+            }
+            if intent == "reply" {
+              if mhx_request {
+                return right_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Invalid form intent for note."),
+                )
+              }
+              return build_response(
+                422, "Unprocessable Entity", "Invalid form intent for note.", "text/plain; charset=utf-8",
+              )
+            }
+            if is_blank_text(text) {
+              if mhx_request {
+                return right_partial_response_for_group(
+                  state,
+                  group_id,
+                  ticket_id,
+                  Some("Note text is required."),
+                )
+              }
+              return build_response(
+                422, "Unprocessable Entity", "Note text is required.", "text/plain; charset=utf-8",
+              )
+            }
+            let sender_id = principal.identity.user_id
+            let sender_name = principal.identity.display_name
+            let msg = @shared.Message::new_note(
+              next_id(state.id_counter, "note"),
+              ticket_id,
+              text,
+              sender_id,
+              group_id~,
+            )
+            let _ = state.message_repo.create(@shared.Message::{
+              ..msg,
+              sender_name,
+            })
+            notify_ticket_updated(state, ticket_id)
+            if mhx_request {
+              return right_partial_response_for_group(
+                state,
+                group_id,
+                ticket_id,
+                None,
+              )
+            }
+            return redirect_to_group_ticket(group_id, ticket_id)
+          }
+          _ => return not_found_response()
+        }
+      }
+      return not_found_response()
+    }
+    None => ()
+  }
+
   let parts = split_path(path)
   if parts.length() == 2 && parts[0] == "tickets" && parts[1] == "close" {
     let form = parse_form(body_to_string(body))
@@ -1741,6 +2695,10 @@ fn handle_post(
           @shared.Public,
           @shared.Console,
           "support",
+          group_id=match ticket {
+            Some(t) => t.group_id
+            None => @shared.default_group_id()
+          },
         )
         let _ = state.message_repo.create(@shared.Message::{
           ..msg,
@@ -1821,6 +2779,10 @@ fn handle_post(
           ticket_id,
           text,
           "support",
+          group_id=match ticket {
+            Some(t) => t.group_id
+            None => @shared.default_group_id()
+          },
         )
         let _ = state.message_repo.create(@shared.Message::{
           ..msg,
@@ -1849,8 +2811,8 @@ async fn build_response_for_request(
   let path = path_only(request.uri)
   let mhx_request = is_mhx_request(request)
   match request.http_method {
-    "GET" => handle_get(state, request.uri)
-    "POST" => handle_post(state, path, request.body, mhx_request)
+    "GET" => handle_get(state, request)
+    "POST" => handle_post(state, request, path, request.body, mhx_request)
     _ =>
       build_response(405, "Method Not Allowed", "", "text/plain; charset=utf-8")
   }
@@ -1891,6 +2853,36 @@ struct DirectStartupConfig {
   platform : String
   endpoint : String
   proxy_url : String
+}
+
+///|
+fn direct_sdk_env_file_path() -> String {
+  "../direct_sdk.mbt/.env"
+}
+
+///|
+fn read_env_file_value(path : String, key : String) -> String {
+  if path == "" || key == "" {
+    return ""
+  }
+  let prefix = key + "="
+  let read_result : Result[String, Error] = try? @fs.read_file_to_string(path)
+  match read_result {
+    Ok(content) => {
+      for line_view in content.split("\n") {
+        let line = line_view.to_string().trim().to_string()
+        if line == "" || has_prefix(line, "#") {
+          continue
+        }
+        if has_prefix(line, prefix) {
+          let value = substring(line, prefix.length(), line.length())
+          return value.trim().to_string()
+        }
+      }
+      ""
+    }
+    Err(_) => ""
+  }
 }
 
 ///|
@@ -1987,21 +2979,71 @@ async fn env_value(name : String) -> String {
 }
 
 ///|
+fn env_bool_or_default(value : String, default_value : Bool) -> Bool {
+  let lowered = value.trim().to_lower()
+  if lowered == "" {
+    return default_value
+  }
+  lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on"
+}
+
+///|
+async fn read_auth_config() -> @auth.AuthConfig {
+  let keycloak_issuer = env_value("KEYCLOAK_ISSUER")
+  let keycloak_realm = env_value("KEYCLOAK_REALM")
+  let keycloak_client_id = env_value("KEYCLOAK_CLIENT_ID")
+  let keycloak_auth_base_url = env_value("KEYCLOAK_AUTH_URL")
+  let public_base_url = env_value("AIRLOCK_PUBLIC_BASE_URL")
+  let strict_text = env_value("AIRLOCK_AUTH_STRICT")
+  {
+    ..@auth.AuthConfig::default(),
+    keycloak_issuer,
+    keycloak_realm,
+    keycloak_client_id: if keycloak_client_id == "" {
+      "airlock-web"
+    } else {
+      keycloak_client_id
+    },
+    keycloak_auth_base_url,
+    public_base_url,
+    strict_mode: env_bool_or_default(strict_text, true),
+  }
+}
+
+///|
 async fn read_direct_startup_config() -> DirectStartupConfig {
   let args = @env.args()
   let token_from_env_primary = env_value("DIRECT4B_API_TOKEN")
   let token_from_env_hubot = env_value("HUBOT_DIRECT_TOKEN")
+  let token_from_env_file = read_env_file_value(
+    direct_sdk_env_file_path(),
+    "HUBOT_DIRECT_TOKEN",
+  )
   let bot_user_id_from_env = env_value("DIRECT4B_BOT_USER_ID")
+  let bot_user_id_from_env_file = read_env_file_value(
+    direct_sdk_env_file_path(),
+    "DIRECT4B_BOT_USER_ID",
+  )
   let platform_from_env = env_value("DIRECT4B_PLATFORM")
   let endpoint_from_env_primary = env_value("DIRECT4B_ENDPOINT")
   let endpoint_from_env_hubot = env_value("HUBOT_DIRECT_ENDPOINT")
+  let endpoint_from_env_file = read_env_file_value(
+    direct_sdk_env_file_path(),
+    "HUBOT_DIRECT_ENDPOINT",
+  )
   let proxy_url_from_env_primary = env_value("DIRECT4B_PROXY_URL")
   let proxy_url_from_env_hubot = env_value("HUBOT_DIRECT_PROXY_URL")
+  let proxy_url_from_env_file = read_env_file_value(
+    direct_sdk_env_file_path(),
+    "HUBOT_DIRECT_PROXY_URL",
+  )
 
   let token = if token_from_env_primary != "" {
     token_from_env_primary
   } else if token_from_env_hubot != "" {
     token_from_env_hubot
+  } else if token_from_env_file != "" {
+    token_from_env_file
   } else {
     match arg_value(args, "direct-token") {
       Some(v) => v
@@ -2010,6 +3052,8 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
   }
   let bot_user_id = if bot_user_id_from_env != "" {
     bot_user_id_from_env
+  } else if bot_user_id_from_env_file != "" {
+    bot_user_id_from_env_file
   } else {
     match arg_value(args, "direct-bot-user-id") {
       Some(v) => v
@@ -2028,6 +3072,8 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
     endpoint_from_env_primary
   } else if endpoint_from_env_hubot != "" {
     endpoint_from_env_hubot
+  } else if endpoint_from_env_file != "" {
+    endpoint_from_env_file
   } else {
     match arg_value(args, "direct-endpoint") {
       Some(v) => v
@@ -2038,6 +3084,8 @@ async fn read_direct_startup_config() -> DirectStartupConfig {
     proxy_url_from_env_primary
   } else if proxy_url_from_env_hubot != "" {
     proxy_url_from_env_hubot
+  } else if proxy_url_from_env_file != "" {
+    proxy_url_from_env_file
   } else {
     match arg_value(args, "direct-proxy-url") {
       Some(v) => v
@@ -2066,6 +3114,7 @@ fn build_ingest_context(state : AppState) -> @core.IngestContext {
     state.message_repo,
     fn() { next_id(state.id_counter, "id") },
     fn() { @env.now().to_string() },
+    route_binding_repo=state.route_binding_repo,
   )
 }
 
@@ -2183,17 +3232,16 @@ async fn rewrite_attachment_urls(
       upload_attachment_url_with_hook(state, normalized, attachment) {
       Some(url) => {
         if has_prefix(
-          original_url,
-          "https://api.direct4b.com/albero-app-server/files/",
-        ) {
+            original_url, "https://api.direct4b.com/albero-app-server/files/",
+          ) {
           state.attachment_proxy_map.val.set(original_url, url)
         }
         @shared.Attachment::{
           ..attachment,
           url: "/attachments/proxy?url=" +
-            url_encode_component(url) +
-            "&name=" +
-            url_encode_component(attachment.name),
+          url_encode_component(url) +
+          "&name=" +
+          url_encode_component(attachment.name),
         }
       }
       None => {
@@ -2204,9 +3252,9 @@ async fn rewrite_attachment_urls(
           @shared.Attachment::{
             ..attachment,
             url: "/attachments/proxy?url=" +
-              url_encode_component(original_url) +
-              "&name=" +
-              url_encode_component(attachment.name),
+            url_encode_component(original_url) +
+            "&name=" +
+            url_encode_component(attachment.name),
           }
         } else {
           attachment
@@ -2282,7 +3330,7 @@ async fn try_start_direct_bridge(
   state : AppState,
   ingest_ctx : @core.IngestContext,
   tasks : @async.TaskGroup[Unit],
-) -> Unit {
+) -> Bool {
   let cfg = read_direct_startup_config()
   println(
     "direct bridge config: endpoint=\{cfg.endpoint} proxy=\{cfg.proxy_url} token_len=\{cfg.token.length().to_string()} bot_user_id=\{cfg.bot_user_id}",
@@ -2296,7 +3344,10 @@ async fn try_start_direct_bridge(
     println(
       "direct bridge disabled: set DIRECT4B_API_TOKEN and DIRECT4B_BOT_USER_ID",
     )
-    return
+    return false
+  }
+  for ticket in state.ticket_repo.list() {
+    upsert_group_route_binding_for_ticket(state, ticket, cfg.bot_user_id)
   }
   let adapter_cfg = @adapters.AdapterConfig::new(
     cfg.platform,
@@ -2324,8 +3375,12 @@ async fn try_start_direct_bridge(
       println(
         "direct bridge connected (platform=\{cfg.platform}, bot_user_id=\{cfg.bot_user_id})",
       )
+      true
     }
-    Err(err) => println("direct bridge connect failed: \{err.to_string()}")
+    Err(err) => {
+      println("direct bridge connect failed: \{err.to_string()}")
+      false
+    }
   }
 }
 
@@ -2334,6 +3389,7 @@ async fn main {
   let state = seed_state()
   let args = @env.args()
   state.dev_mode.val = has_flag(args, "dev")
+  state.auth_config.val = read_auth_config()
   if state.dev_mode.val {
     println("dev mode enabled: timeline renders raw_data when available")
   }
@@ -2366,7 +3422,8 @@ async fn main {
     state.s3_region.val = s3_region
   }
   let attachment_upload_cmd_env = env_value("AIRLOCK_ATTACHMENT_UPLOAD_CMD")
-  let attachment_upload_cmd_arg = match arg_value(args, "attachment-upload-cmd") {
+  let attachment_upload_cmd_arg = match
+    arg_value(args, "attachment-upload-cmd") {
     Some(v) => v.trim().to_string()
     None => ""
   }
@@ -2411,6 +3468,24 @@ async fn main {
                 if request.http_method == "GET" && path == "/events" {
                   handle_sse_subscribe(state, conn)
                   return
+                }
+                match detect_group_id_from_path(path) {
+                  Some(group_id) =>
+                    if request.http_method == "GET" &&
+                      strip_group_prefix(path, group_id) == "/events" {
+                      match require_group_access(state, request, group_id) {
+                        Ok(_) => {
+                          handle_sse_subscribe(state, conn, group_id~)
+                          return
+                        }
+                        Err(resp) => {
+                          let response_bytes = @http.encode_response(resp)
+                          conn.write(array_to_bytes(response_bytes))
+                          return
+                        }
+                      }
+                    }
+                  None => ()
                 }
                 let response = build_response_for_request(state, request)
                 let response_bytes = @http.encode_response(response)
